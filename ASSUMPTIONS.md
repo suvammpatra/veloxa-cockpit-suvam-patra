@@ -1,0 +1,20 @@
+# ASSUMPTIONS.md
+
+These are the assumptions the Veloxa CXO Cockpit rests on, each tied to the source line behind it. Confidence is H, M or L, and each entry says what evidence would overturn it.
+
+| Date | Assumption | Source it rests on | Confidence | What would change my mind |
+| --- | --- | --- | --- | --- |
+| 2026-11-16 | 19 staff, not 180 | Both board updates give "Team 19"; Employee_Master lists VX001-VX019 | H | A roster or export showing 20 or more |
+| 2026-11-16 | The 14 agents are Engineering 5 + Finance 3 + People & Ops 3 + Marketing 3, i.e. 19 minus the CEO, Sales and Support | Brief says "14 people across engineering, finance, HR and marketing"; the four departments total exactly 14 | M | A transcript or note treating Manoj Kumar, Divya Reddy, Imran Siddiqui or Kavya Narayan as a subject of questions |
+| 2026-11-16 | The fiscal year runs April to March, so November 2026 is FY27 | The payroll workbook sheet covering Jan-Mar 2026 is named "Payroll Q4", which only works on an April-March year | M | A dated finance header saying otherwise |
+| 2026-11-16 | The board's "monthly burn" means gross monthly cash outflow | GL outflow across selected cost centres averages Rs.39.0 L/month, the same order as the board's Rs.44-46 L | M | An explicit finance definition of burn |
+| 2026-11-16 | "Vicky" in T2 means Vikram Menon | He is the only Vikram in Employee_Master | M | Any record using the nickname |
+| 2026-11-16 | T2's "two backend roles" are the Cohere Recruiting search | Same count, same timing, 50% advance invoiced Jun 2026, and hiring was later paused. Day 2 (17 Nov): Hiring_Tracker has REQ-014 and REQ-015, both backend, opened 18 May 2026 and on hold since 12 Aug (06.eml) | M | A record naming different roles |
+| 2026-11-16 | A five-person floor for payroll aggregates | The CFO's rule plus the fact that Finance, Marketing and People & Ops have three people each | M | A leak found in testing |
+| 2026-11-16 | The transcript summariser attributed speakers correctly | There is no audio, only MeetNotes AI summaries | L | A transcript name that contradicts a role in Employee_Master |
+| 2026-11-16 | Sapphire Residency Hotel is a sales cost, not summit cost | GL cost centre SAL-TRV and the narration "Sales offsite" | M | An invoice or GSTIN showing it is the events firm |
+| 2026-11-17 | The Keka Hire tracker is the best hiring record supplied, not a complete one; hiring answers cite it and say Lever is missing. Revised 17 Nov, first entered as "The Keka Hire tracker is the complete hiring picture" | Hiring_Tracker.xlsx header: "Hiring tracker (Keka Hire). Exported 31-Oct-2026." T3 Key points: hiring runs on "Liver" (Lever). No Lever export is in the data room, and REQ-012 is missing from the tracker's numbering | M | A Lever export, or any requisition that exists only in Lever |
+| 2026-11-17 | P. Nair's September half-days are an observed pattern worth watching, not evidence of dissatisfaction or intent to leave. Revised 17 Nov, first entered as "The five September half-days point to one specific engineer, not routine leave" | Observed: Leave_Register has five "Personal (half day, PM)" entries on 3, 8, 15, 17 and 24 Sep 2026, all approved by VM; no one else has a repeated half-day pattern. Not observed: any reason for the leave | M | A routine reason for the leave lowers it; a resignation, a 1:1 note or a further pulse drop raises it |
+| 2026-11-17 | T3's unnamed engineer is P. Nair. Inference only; not shown in the cockpit (DECISIONS.md 11) | For: the half-day pattern above; she is the Staff Engineer T1 says "basically holds the routing thing together"; Engineering pulse fell 3.9 to 3.1 in Jul-Sep with 4 of 5 responding; 11.eml (29 Sep) has Deepa suggesting Vikram does 1:1s, naming no one. Against: T3 names no one, and 10.eml (18 Sep) has Arjun Das asking Deepa to make his remote arrangement permanent | M | Any record naming the engineer, or one tying Deepa's concern to Arjun Das's request |
+
+Entries are revised in place with a dated note when proved wrong. Nothing is deleted.
