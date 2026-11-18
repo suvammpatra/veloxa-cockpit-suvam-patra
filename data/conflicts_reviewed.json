@@ -1,0 +1,69 @@
+{
+  "about": "Reviewed conflicts. Only conflicts documented with an ID in ARCHITECTURE.md (section 7 and 15.5). Load after ingesting the source pack: python -m app.ingestion conflicts data/conflicts_reviewed.json. Each side must match exactly one ingested record, or the conflict is not loaded. Status is open for all three because ARCHITECTURE.md gives a working position for each but does not mark any as resolved; only a reviewer changes status here.",
+  "conflicts": [
+    {
+      "conflict_key": "C-ARR",
+      "title": "Annual recurring revenue: call transcripts versus board updates",
+      "status": "open",
+      "noted_on": "2026-11-16",
+      "documented_in": "ARCHITECTURE.md section 7 (C-ARR)",
+      "confidence": "M",
+      "resolution": "The board's Rs.5.8-6.1 Cr stands as the only period-labelled figure. Leading hypothesis for the transcript: T2's 'forty-eight' was monthly revenue in lakhs, not ARR. T1's 42-45 crore has no reconciling reading yet. Untestable: no export contains a revenue line",
+      "would_overturn": "A revenue export or invoice register that disagrees with the board, or shows monthly revenue far from Rs.48 L",
+      "sides": [
+        {"side": "A", "file": "T1_CEO_Kickoff_Call.docx", "match": ["forty-two crore"], "date": null,
+         "summary": "T1: \"forty-two crore, maybe forty-five\""},
+        {"side": "A", "file": "T2_CFO_Call.docx", "match": ["forty-eight"], "date": null,
+         "summary": "T2: \"forty-eight\" at the start of the year"},
+        {"side": "B", "file": "Board_Update_Apr-Jun_2026.pdf", "match": ["ARR", "5.8"], "date": "2026-07-08",
+         "summary": "Board: Rs.5.8 Cr (Apr-Jun)"},
+        {"side": "B", "file": "Board_Update_Jul-Sep_2026.pdf", "match": ["ARR", "6.1"], "date": "2026-10-06",
+         "summary": "Board: Rs.6.1 Cr (Jul-Sep)"}
+      ]
+    },
+    {
+      "conflict_key": "C-BURN",
+      "title": "Monthly burn: call transcripts versus board updates",
+      "status": "open",
+      "noted_on": "2026-11-16",
+      "documented_in": "ARCHITECTURE.md section 7 (C-BURN). The GL figure in section 7 (Rs.2,34,37,530 Apr-Sep) is a total over many ledger rows, not one record, so it is not a side here",
+      "confidence": "M",
+      "resolution": "Board. GL Rs.39.0 L/month corroborates within about 12%; the gap is unexported cost centres. T2 is impossible: payroll alone is Rs.31.75 L/month",
+      "would_overturn": "A full-ledger export materially different from the board, or a different finance definition of burn",
+      "sides": [
+        {"side": "A", "file": "T2_CFO_Call.docx", "match": ["two point two lakhs"], "date": null,
+         "summary": "T2: \"two point two lakhs a month\""},
+        {"side": "A", "file": "T1_CEO_Kickoff_Call.docx", "match": ["two point two"], "date": null,
+         "summary": "T1: \"two point two\", no unit"},
+        {"side": "B", "file": "Board_Update_Apr-Jun_2026.pdf", "match": ["burn", "46"], "date": "2026-07-08",
+         "summary": "Board: Rs.46 L monthly burn (Apr-Jun)"},
+        {"side": "B", "file": "Board_Update_Jul-Sep_2026.pdf", "match": ["burn", "44"], "date": "2026-10-06",
+         "summary": "Board: Rs.44 L monthly burn (Jul-Sep)"}
+      ]
+    },
+    {
+      "conflict_key": "C-ATLAS-DONE",
+      "title": "Atlas engine feature-complete: board update versus Jira",
+      "status": "open",
+      "noted_on": "2026-11-18",
+      "documented_in": "ARCHITECTURE.md 15.5 (C-ATLAS-DONE). Story keys from TRANSCRIPT_NOTES.md, Day 3, contradictions between records",
+      "confidence": "M",
+      "resolution": "Jira for ticket status, the board for what the board was told",
+      "would_overturn": "A Jira history showing the stories were closed when the board update was sent and reopened later, which a status snapshot cannot show (TRANSCRIPT_NOTES.md, Day 3)",
+      "sides": [
+        {"side": "A", "file": "Board_Update_Jul-Sep_2026.pdf", "match": ["feature-complete"], "date": "2026-10-06",
+         "summary": "Board (6 Oct): \"the engine itself is feature-complete\""},
+        {"side": "B", "file": "Jira_Export_ATLAS.xlsx", "locator": "Issues!", "match": ["ATLAS-16"], "date": "2026-10-31",
+         "summary": "ATLAS-16, a core-engine story, not Done at export"},
+        {"side": "B", "file": "Jira_Export_ATLAS.xlsx", "locator": "Issues!", "match": ["ATLAS-19"], "date": "2026-10-31",
+         "summary": "ATLAS-19, a core-engine story, not Done at export"},
+        {"side": "B", "file": "Jira_Export_ATLAS.xlsx", "locator": "Issues!", "match": ["ATLAS-21"], "date": "2026-10-31",
+         "summary": "ATLAS-21, a core-engine story, not Done at export"},
+        {"side": "B", "file": "Jira_Export_ATLAS.xlsx", "locator": "Issues!", "match": ["ATLAS-24"], "date": "2026-10-31",
+         "summary": "ATLAS-24, a core-engine story, not Done at export"},
+        {"side": "B", "file": "Jira_Export_ATLAS.xlsx", "locator": "Issues!", "match": ["ATLAS-25"], "date": "2026-10-31",
+         "summary": "ATLAS-25, a core-engine story, not Done at export"}
+      ]
+    }
+  ]
+}

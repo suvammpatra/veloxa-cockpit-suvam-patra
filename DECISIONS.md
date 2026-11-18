@@ -115,3 +115,85 @@ These are choices that could reasonably be defended either way, recorded with wh
 - Alternatives rejected: Showing no date; showing today's date.
 - Why: The records stop at 31 October 2026 (T6a section 3). Presenting them as live would mislead her.
 - What it costs me: She will see that the data is weeks old.
+
+## Day 3 — 18 November 2026
+
+Decisions 17 to 23 were approved on 18 November 2026. Evidence is in the Day 3 sections of TRANSCRIPT_NOTES.md, ASSUMPTIONS.md and ARCHITECTURE.md (section 15).
+
+## 17. Reporting relationships are effective-dated (T6b)
+
+- Decision: Who reports to whom, and which department sits under which leader, is stored as rows with a start date, an end date, a status and a source. A move closes the old row and adds a new one. Nothing is overwritten.
+- Alternatives rejected: A manager field that the next export overwrites; a full copy of the org chart for every day.
+- Why: T6b: "Make sure the thing doesn't break when we move people around." A question about August must still get the August answer after a move. Employee_Master is one snapshot with no history.
+- What it costs me: Every org question needs an as-of date. Keka shows the lines on 31 Oct only; earlier lines are "unknown" unless another record shows them, never back-filled to the join date.
+
+## 18. T6b stays pending until a source confirms the date
+
+- Decision: Marketing reporting to the CRO is stored as an announced change with no effective date. The current org does not change until a source confirms the date. The cockpit shows the pending change next to the current line.
+- Alternatives rejected: Applying it from "next month"; ignoring it until it happens.
+- Why: The note is undated, so "next month" has no anchor, and she says the date is "still finalising". T4 gives no date either.
+- What it costs me: For a while the cockpit shows Marketing under the CEO while she thinks of it as under the CRO.
+
+## 19. The CRO is a vacant role until the holder is confirmed
+
+- Decision: Roles are stored apart from the people who hold them. Marketing can report to "CRO (vacant)" before anyone is named.
+- Alternatives rejected: Waiting for a name; attaching the role to the current Sales Lead.
+- Why: No CRO is in Employee_Master or Hiring_Tracker. Picking a person would invent a fact.
+- What it costs me: One more table, and some answers that say "vacant".
+
+## 20. The privacy floor uses membership on the query date
+
+- Decision: The five-person floor (decision 3) is checked against who was in the group on the date asked. The differencing rule also applies across dates: the same group label on two dates counts as two groups, and if their members differ by fewer than five, comparing the totals is refused.
+- Alternatives rejected: Checking group size on today's org only.
+- Why: Moving one person between two months makes the change in a total close to that person's pay. Sales has 2 people and Marketing 2 after 31 Oct, so a CRO group would hold 4, or 5 with the CRO.
+- What it costs me: More refusals after each reorg. A CRO-level payroll total may be refused or sit right on the floor.
+
+## 21. Sneha and Snehal are never merged; git and Jira aliases need evidence
+
+- Decision: Sneha and Snehal stay two people. A git author email or Jira initials map to a person only through an alias row that cites the record supporting it, with a confidence.
+- Alternatives rejected: Fuzzy name matching; mapping by spelling alone.
+- Why: The rota puts Sneha and Snehal in the same week, so they cannot be one person. Merging them would move incidents between an employee and a contractor. Priya Nair commits under two addresses, so counting by email alone would split her work.
+- What it costs me: Some names stay unresolved, and alias rows need review.
+
+## 22. Contractors are tracked separately from employee headcount
+
+- Decision: A contractor is a Person with no Emp ID, worker type "contractor", and the records that show them (invoice, rota, incidents). Headcount answers say 19 employees and list contractors separately.
+- Alternatives rejected: Leaving contractors out; counting them as staff.
+- Why: Keka excludes contractors and the board says Team 19. But the on-call contractor has covered one of the two rota slots every week since mid-August and costs Rs.1,20,000 a month plus GST (Invoice PIS-114).
+- What it costs me: "How big is Engineering?" has two answers, and each must say which one it is.
+
+## 23. Commit times are not a worry signal; 09.eml is used only for ownership questions
+
+- Decision: Priya Nair's late-night and weekend commit pattern is never shown as a CEO worry item or as an employee performance signal. 09.eml may be cited when answering a question directly about Atlas ownership, and never to infer resignation, dissatisfaction or personal motive.
+- Alternatives rejected: Showing the pattern as a workload or retention risk; excluding 09.eml entirely.
+- Why: Commit times are not hours worked or output, and they are one person's private pattern (decision 11). 09.eml asks to talk about ownership and says nothing about her intentions.
+- What it costs me: A real workload problem may be under-signalled. The Atlas worry item can still show ticket concentration without naming anyone.
+
+## Build — 18 November 2026
+
+Decision 24 was made on 18 November 2026, at the Phase 2 build checkpoint.
+
+## 24. Agents are evidence-only
+
+- Decision: The 14 agents have no invented persona. They speak only from records: responsibilities, projects, workload signals where the records support them, history, and what is unknown. No invented personality, personal detail, opinion, motivation, activity or relationship. Workload signals stay within decisions 11 and 23. This replaces the persona layer in ARCHITECTURE.md section 8, and the README line that invented detail is logged as an assumption.
+- Alternatives rejected: An invented persona, labelled as invented and logged in ASSUMPTIONS.md (ARCHITECTURE.md section 8 as written).
+- Why: The agents represent the company as its records show it. This is a product decision, not a technical limit.
+- What it costs me: The agents are less lifelike. They will say "the records don't show that" more often.
+
+## Phase 5 checkpoint — 18 November 2026
+
+Decisions 25 and 26 were approved on 18 November 2026, at the Phase 5 checkpoint.
+
+## 25. Corroboration means the same fact; a refusal's confidence is about the policy
+
+- Decision: Two records corroborate only when independent systems state the same fact. Records that support different parts of one answer do not, and copies of one source never count as independent. A policy refusal may show High confidence, but only as confidence in the policy decision. It is labelled so, and it says the business question was not answered.
+- Alternatives rejected: Counting any two systems that support an answer as agreement (the first Phase 5 draft).
+- Why: A kit status and a Jira date are two facts, not one fact seen twice. A refusal's High must not read as a high-confidence business answer.
+- What it costs me: Fewer answers reach High. Most rest on one export and stay Medium.
+
+## 26. Conflicts come from a reviewed file and are never resolved automatically
+
+- Decision: Conflicts documented in ARCHITECTURE.md are loaded from a reviewed file. Every side must match one ingested record, or the conflict is not loaded. Status changes only by review. Loading never overwrites a stored conflict.
+- Alternatives rejected: Finding conflicts in prose automatically; loading a conflict whose records are not found; marking a conflict resolved because a working position exists.
+- Why: A conflict is a claim about records. It must point at records that exist, and settling it is a judgement for a person.
+- What it costs me: The file must be kept by hand. A conflict is invisible until its records are ingested and the file is loaded.
