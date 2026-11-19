@@ -4,6 +4,7 @@
   python -m app.ingestion status
   python -m app.ingestion aliases FILE.csv
   python -m app.ingestion conflicts FILE.json
+  python -m app.ingestion org FILE.json
 
 PATH is a file or a folder (read recursively). --release-day is required: it is
 the day the pack was released to me, and every record from it is known from
@@ -26,6 +27,7 @@ from app.config import get_settings
 from app.database import init_db, make_engine, make_session_factory
 from app.ingestion.conflict_registry import load_reviewed_conflicts
 from app.ingestion.identity_links import link_identities, load_curated
+from app.ingestion.org_registry import load_reviewed_org
 from app.ingestion.pipeline import Ingestor, IngestReport
 from app.logging_config import setup_logging
 from app.models import Alias, Evidence, IngestionError, SourceRecord
@@ -53,6 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
     al.add_argument("file", type=Path)
     co = sub.add_parser("conflicts", help="Load reviewed conflicts from a JSON file (after ingesting).")
     co.add_argument("file", type=Path)
+    og = sub.add_parser("org", help="Load reviewed contractors and announced changes (after ingesting).")
+    og.add_argument("file", type=Path)
     return p
 
 
@@ -120,13 +124,14 @@ def main(argv: list[str] | None = None) -> int:
                 total = s.scalar(select(func.count(Alias.id)))
             print(f"Loaded {n} reviewed alias rows ({total} alias rows in total). Name links: {stats}")
             return 0
-        if args.command == "conflicts":
+        if args.command in ("conflicts", "org"):
+            loader = load_reviewed_conflicts if args.command == "conflicts" else load_reviewed_org
             with factory() as s:
                 try:
-                    r = load_reviewed_conflicts(s, args.file)
+                    r = loader(s, args.file)
                 except (ValueError, OSError) as exc:
                     s.rollback()
-                    print(f"Conflict file not loaded: {exc}", file=sys.stderr)
+                    print(f"Reviewed file not loaded: {exc}", file=sys.stderr)
                     return 2
                 s.commit()
             for key in r.loaded:

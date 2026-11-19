@@ -8,6 +8,17 @@ from app.database import init_db, make_engine, make_session_factory
 from app.main import create_app
 
 
+@pytest.fixture(autouse=True)
+def _isolated_data_dir(tmp_path, monkeypatch):
+    """No test can reach the demo or project database through .env or the shell: the data folder
+    is the test's own temporary folder unless a test sets it explicitly (README, 'Demo data')."""
+    from app.config import get_settings
+    monkeypatch.setenv("VELOXA_DATA_DIR", str(tmp_path / "isolated-data"))
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def settings(tmp_path) -> Settings:
     return Settings(data_dir=tmp_path, db_filename="test.db", log_level="WARNING")
