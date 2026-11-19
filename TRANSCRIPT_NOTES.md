@@ -82,3 +82,26 @@ T4 and T5 are machine summaries and T6b is a machine transcription. None is date
 Email_Printouts.pdf holds the same eleven messages as the .eml files, without Message-IDs. The bodies match. It is a second copy, not a second source.
 
 09.eml, Priya Nair to Vikram, Tue 1 Sep, 23:47 IST: "Can we talk about Atlas ownership sometime this week? Need some time with you." It is a request to talk. It states no complaint, no request to change role and no plan to leave. No reply is in the records. The Jira GA date was changed the next day (2 Sep, by "vikram"); no record links the two. Her commits continue to 30 Oct (5c9beeb70c), so git shows no sign of her stepping back.
+
+## Day 4 — 19 November 2026
+
+| Date | Transcript | Heard or written as | Resolved to | Evidence | Conclusion |
+| --- | --- | --- | --- | --- | --- |
+| 2026-11-19 | T6d para 3 | "Pria resigned this morning" | Priya Nair (VX007), probable only | Reviewed alias "Pria" to VX007 at M, known from 19 Nov 10:00, from the T1 and T5 spellings. The Keka export of 31 Oct shows her Active with no exit date | A CEO-reported, unverified resignation (DECISIONS.md 33). No HR record is changed |
+| 2026-11-19 | T6d para 3 | "version three" | Atlas | Board_Update_Apr-Jun_2026.pdf: "Atlas (routing engine v3)". Jira epics ATLAS-1 "Core routing engine v3" and ATLAS-3 "Public API v3". T1 para 4 also says "version three" | Read as Atlas, citing those records |
+| 2026-11-19 | T6d para 3 | "Notice period two months, I think" | Not resolved | No record gives her notice terms | Kept as written. No last working day is worked out |
+| 2026-11-19 | T6c para 3 | "slag messages" | Probably "Slack messages" | No Slack export is in the records | Not read either way (DECISIONS.md 34) |
+| 2026-11-19 | T6c para 3 | "Deepa says it's fine" | Not resolved; not needed | - | One person's approval is not consent from the people concerned (DECISIONS.md 34) |
+
+Both Day 4 documents carry an internal date of 14 Nov 2026 11:33 UTC, the same as T6b. It is the template's date, not when the notes were recorded, and it is not used.
+
+## Clarification — 19 November 2026: the September leave pattern
+
+This clarifies the Day 2 row dated 2026-11-17 for T3 Key points ("one engineer I'm worried about"). Its evidence includes the September half-day leave entries. The row stays as written.
+
+- The September leave observation in that row is historical context. It is not admissible evidence now.
+- Under the clarified decision 29, approved on 19 November 2026, every leave-register row is withheld whole from user-facing output, whatever its leave type.
+- The pattern must not be used in answers, citations, evidence detail, agent profiles, risk assessments or worry list items.
+- The source data is unchanged. Leave_Register.xlsx and its stored rows are as ingested; only what the cockpit may show has changed.
+- Concern 2 in `voice_notes/T6a.md` was updated on 19 November 2026 to remove this evidence.
+- This clarification adds no new inference about the employee or their circumstances, and it does not re-assess the earlier row.

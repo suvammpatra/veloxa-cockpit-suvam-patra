@@ -90,3 +90,15 @@ def first_full_date(text: str) -> tuple[date, str] | None:
         if d:
             return d, m.group(0).strip()
     return None
+
+
+def first_numeric_dmy(text: str) -> tuple[date, str] | None:
+    """The first DD/MM/YYYY date in a text, as written. Used only where the day-first
+    reading was approved (Indian vendor invoices, ARCHITECTURE.md 16.10); "01/10/2026" is
+    1 October 2026. A value that is not a real date returns nothing."""
+    for m in re.finditer(r"(?<![\d/])(\d{1,2})/(\d{1,2})/(\d{4})(?![\d/])", text):
+        try:
+            return date(int(m.group(3)), int(m.group(2)), int(m.group(1))), m.group(0)
+        except ValueError:
+            continue
+    return None

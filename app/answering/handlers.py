@@ -11,6 +11,7 @@ citation and computes confidence. A handler only reports the factors.
 
 from __future__ import annotations
 
+import json
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -23,14 +24,14 @@ from app.answering import classify as C
 from app.answering.classify import Intent
 from app.answering.model import Answer, ChainLink, Factors
 from app.answering.parse import Entities, PersonMention, find_day, find_period, released_people
-from app.models import (Claim, ConflictSide, Department, DepartmentLine, DepartmentMembership, Evidence, Incident,
+from app.models import (Alias, Claim, ConflictSide, Department, DepartmentLine, DepartmentMembership, Evidence, Incident,
                         Person, SourceRecord, Ticket)
 from app.privacy.payroll import REFUSALS, PayrollAggregator
-from app.repositories.temporal import released_by, valid_at, visible
+from app.repositories.temporal import pending, released_by, valid_at, visible
 from app.retrieval import fts, policy
 from app.retrieval.search import Filters, Hit, SearchError, conflicts_for, search
-from app.services.identity import resolve_person
-from app.services.org import department_members, department_reports_to, manager_as_of
+from app.services.identity import normalize, resolve_person
+from app.services.org import department_members, department_reports_to, manager_as_of, position_holder
 from app.temporal import Mode, TimeContext
 
 
@@ -98,9 +99,9 @@ def quote_from(content: str, words, *, limit: int = 220) -> str | None:
     best, best_n, best_hit = None, (0, 0), None
     for m in re.finditer(r"[^.!?\n;]+[.!?]?", content):
         s = m.group(0).strip()
-        if _META.match(s):
-            continue  # email headers and document labels, not statements
-        hits = [h for w in words if (h := re.search(rf"\b{re.escape(w)}", s, re.I))]
+        if _META.match(s) or "[text withheld" in s:
+            continue  # email headers, document labels and withheld text are not statements
+        hits = [h for w in words if (h := re.search(_word(w), s, re.I))]
         score = (len(hits), sum(len(h.group(0)) for h in hits))
         if hits and score > best_n:
             best, best_n, best_hit = s, score, hits[0]
@@ -133,18 +134,43 @@ def question_day(a: Ask) -> tuple[datetime, str | None]:
     return end_of(day), note
 
 
+def _word(w: str) -> str:
+    """Short words and acronyms ("GA") match as whole words; longer words also match their
+    word forms ("delay" finds "delayed")."""
+    return rf"\b{re.escape(w)}\b" if len(w) <= 3 else rf"\b{re.escape(w)}"
+
+
+def hours_remark(session: Session, content: str, ctx: TimeContext) -> bool:
+    """True when the record holds a sentence pairing a working-hours phrase with a name
+    (decisions 23 and 28). The rule itself lives in app.retrieval.disclosure."""
+    from app.retrieval import disclosure
+    return "working_hours" in disclosure.redact(session, content, ctx).reasons
+
+
 def statements(a: Ask, query: str, words, *, purpose: str | None = None, exclude_systems=("Jira",),
-               limit: int = 6) -> list[Hit]:
-    """Text records that mention the topic, oldest first, each with a quotable sentence."""
+               limit: int = 6, require: tuple[str, ...] = ()) -> list[Hit]:
+    """Text records that mention the topic, oldest first, each with a quotable sentence.
+
+    Excluded systems are left out in SQL, before the result limit. When `require` is given,
+    the record must also name one of those words (e.g. the project), so a generic word
+    such as "lead" does not pull in unrelated rows."""
+    exclude_systems = tuple(exclude_systems) + _no_commits(a)
     try:
-        r = search(a.session, query, a.ctx, Filters(purpose=purpose), limit=30)
+        r = search(a.session, query, a.ctx, Filters(purpose=purpose, exclude_systems=exclude_systems),
+                   limit=100)
     except SearchError:
         return []
-    hits = [h for h in r.hits if not h.via_conflict and (h.citation.system or "") not in exclude_systems
-            and quote_from(h.content, words)]
+    hits = [h for h in r.hits if not h.via_conflict and quote_from(h.content, words)
+            and (not require or any(re.search(_word(w), h.content, re.I) for w in require))]
     hits.sort(key=lambda h: (h.citation.exported_on is None, h.citation.exported_on or datetime.max,
                              int(h.citation.evidence_key[1:])))
     return hits[:limit]
+
+
+def _no_commits(a: Ask) -> tuple[str, ...]:
+    """Git commit records are left out, in SQL, for any question about a person, on-call, hours or
+    activity (DECISIONS.md 30). The engine checks the finished answer again."""
+    return (C.COMMIT_SYSTEM,) if C.commit_records_barred(a.question, a.ents) else ()
 
 
 def statement_link(h: Hit, words, role: str = "context") -> ChainLink:
@@ -187,8 +213,9 @@ def unknown_person(a: Ask, name: str) -> Answer:
 
 REFUSAL_TEXT = {
     "performance_assessment": (
-        "I won't judge a person from commit times or treat activity records as performance. Commit times show "
-        "when commits were made, not hours worked, output or how someone feels (DECISIONS.md 23).",
+        "I won't describe or judge a person's working hours, commit times or performance. Commit times and "
+        "remarks about late nights are not records of hours worked, output or how someone feels "
+        "(DECISIONS.md 23).",
         "Ask about the work instead: ticket status, or who holds Atlas tickets."),
     "speculation": (
         "The records don't show anyone's intentions or feelings, and I won't infer them (DECISIONS.md 11, 23). "
@@ -205,9 +232,26 @@ REFUSAL_TEXT = {
 }
 
 
+_CONTINUITY_OFFER = ("Ask instead: \"What is our workforce continuity?\" It lists confirmed departures, open and "
+                     "paused roles, contractors and work that rests on one person, from the records, with no one "
+                     "scored.")
+REFUSAL_TEXT["retention_ranking"] = (
+    "I won't rank or score people by how likely they are to leave. The records don't show anyone's intentions, and a "
+    "ranking built from emails, calls, leave, commit activity, hours or sentiment would be a guess about each person "
+    "(DECISIONS.md 11, 23, 34). Private messages, such as Slack or WhatsApp, are not in the records and are not read.",
+    _CONTINUITY_OFFER)
+REFUSAL_TEXT["private_messages"] = (
+    "I can't show private messages. Slack, WhatsApp and other private messages are not in the records, and the "
+    "cockpit does not read people's private communications (DECISIONS.md 34).",
+    _CONTINUITY_OFFER)
+
+
 def refusal(a: Ask, reason: str | None = None) -> Answer:
     reason = reason or a.intent.refusal
     text, change = REFUSAL_TEXT[reason]
+    if re.search(C.CONSENT, a.question, re.I):
+        text += (" One person's approval doesn't change this: it is not consent from the people concerned, and the "
+                 "rule does not depend on who asks.")
     ans = a.new(text, status="refused", refusal=reason, weakest_link="None: this is a fixed rule, not a "
                 "reading of the records.", would_change_mind=change)
     ans.kind = "refusal"
@@ -226,7 +270,11 @@ def company_headcount(a: Ask) -> Answer:
     at, note = question_day(a)
     people = released_people(a.session, a.ctx)
     employees = [p for p in people if p.worker_type == "employee" and employed_at(p, at)]
-    contractors = sorted(p.full_name for p in people if p.worker_type == "contractor")
+    contractor_rows = [p for p in people if p.worker_type == "contractor"]
+    contractor_ev = usable(a.session, a.ctx, [p.source_evidence_id for p in contractor_rows])
+    # A contractor is listed only when the record behind it is visible here, and never counted.
+    contractors = sorted(p.full_name for p in contractor_rows
+                         if p.source_evidence_id is None or p.source_evidence_id in contractor_ev)
     if not employees:
         return _none(a, "No employee records are known at this date.",
                      "Employee records arrive with the Keka export.")
@@ -252,6 +300,8 @@ def company_headcount(a: Ask) -> Answer:
         f.completeness = "partial"
     chain = _by_source(evs.values(), lambda n, fn: f"{n} employee rows in {fn} employed on {d(at)} "
                                                    "(join and exit dates)")
+    chain += _by_source(contractor_ev.values(), lambda n, fn: f"Contractor record ({fn}); listed, not counted",
+                        role="context")
     ans = a.new(short, evidence_chain=chain, weakest_link=weak,
                 would_change_mind="A dated Keka history, or a later export that lists different people.")
     ans.factors = f
@@ -348,6 +398,13 @@ def manager(a: Ask) -> Answer:
     pend_ev = usable(a.session, a.ctx, res.pending_evidence_ids)
     pending = (" Pending: " + "; ".join(res.pending_changes) + " (not applied until a source confirms the date, "
                "DECISIONS.md 18).") if res.pending_changes else ""
+    member = a.session.scalars(valid_at(select(DepartmentMembership).where(DepartmentMembership.person_id == p.id),
+                                        DepartmentMembership, at, release_cutoff=a.ctx.release_cutoff)).first()
+    dept_pend = pending_department_lines(a, member.department) if member else []
+    if dept_pend:
+        pending += (" Pending for " + member.department.name + ", not in effect: "
+                    + "; ".join(t for t, _ in dept_pend) + " (DECISIONS.md 18).")
+        pend_ev.update({e.id: e for _, e in dept_pend})
     chain = []
     if res.status == "known":
         if not line_ev:
@@ -377,24 +434,45 @@ def manager(a: Ask) -> Answer:
     return ans
 
 
+def pending_department_lines(a: Ask, dept: Department) -> list[tuple[str, Evidence]]:
+    """Announced changes for a department that may be shown at this time frame: released by
+    the cutoff, and with a source record visible here (so an undated transcript is not shown
+    in recorded-by mode). They are never applied (DECISIONS.md 18)."""
+    rows = a.session.scalars(pending(select(DepartmentLine).where(DepartmentLine.department_id == dept.id),
+                                     DepartmentLine, release_cutoff=a.ctx.release_cutoff)).all()
+    evs = usable(a.session, a.ctx, [r.source_evidence_id for r in rows])
+    out = []
+    for r in rows:
+        if r.source_evidence_id not in evs:
+            continue
+        holder = position_holder(a.session, r.reports_to.code, a.ctx)
+        when = f"from {d(r.valid_from)}" if r.valid_from else "effective date not confirmed"
+        out.append((f"announced that {dept.name} will report to {r.reports_to.title} "
+                    f"({holder.full_name if holder else 'no holder on record'}), {when}", evs[r.source_evidence_id]))
+    return out
+
+
 def _department_line(a: Ask, dept: Department) -> Answer:
     at, note = question_day(a)
-    label, pend = department_reports_to(a.session, dept.code, org_context(a.ctx, at))
-    rows = a.session.scalars(released_by(select(DepartmentLine).where(DepartmentLine.department_id == dept.id),
-                                         DepartmentLine, a.ctx.release_cutoff)).all()
+    label, _ = department_reports_to(a.session, dept.code, org_context(a.ctx, at))
+    pend = pending_department_lines(a, dept)
+    rows = a.session.scalars(valid_at(select(DepartmentLine).where(DepartmentLine.department_id == dept.id),
+                                      DepartmentLine, at, release_cutoff=a.ctx.release_cutoff)).all()
     evs = usable(a.session, a.ctx, [r.source_evidence_id for r in rows])
     if label is None and not pend:
         return _none(a, f"No record shows which leader {dept.name} sits under. Individual reporting lines are in "
                         "Keka; ask about a person.", "A record of the department's line.")
     short = (f"{dept.name} sits under {label} on {d(at)}." if label else
-             f"No confirmed line for {dept.name} on {d(at)}.")
+             f"No confirmed line for {dept.name} on {d(at)}; the current reporting lines of its people are "
+             "unchanged.")
     if pend:
-        short += " Pending: " + "; ".join(pend) + " (DECISIONS.md 18)."
-    ans = a.new(short, status="answered" if label else "uncertain",
-                evidence_chain=[ChainLink(f"Department line records for {dept.name}", _keysort(evs.values()))]
-                if evs else [],
-                weakest_link="Department lines are stored only from records that state them.",
-                would_change_mind="A dated announcement of the change.")
+        short += " Pending, not in effect: " + "; ".join(t for t, _ in pend) + " (DECISIONS.md 18)."
+    chain = [ChainLink(f"Department line records for {dept.name}", _keysort(evs.values()))] if evs else []
+    chain += [ChainLink(f"Announced change: {t}", [e.evidence_key], role="context") for t, e in pend]
+    ans = a.new(short, status="answered" if label else "uncertain", evidence_chain=chain,
+                weakest_link=("The announcement gives no effective date, so it is not applied."
+                              if pend else "Department lines are stored only from records that state them."),
+                would_change_mind="A dated announcement of the change, or a Keka export showing the new line.")
     if not label:
         ans.factors.completeness = "insufficient"
     if note:
@@ -691,7 +769,7 @@ def _claim_quote(ev: Evidence, value: str) -> str | None:
 def release_date(a: Ask) -> Answer:
     views, versions = release_views(a)
     topic = " ".join(a.ents.projects) or ""
-    stmts = statements(a, f"{topic} GA release date".strip(), RELEASE_WORDS)
+    stmts = statements(a, f"{topic} GA release".strip(), RELEASE_WORDS)
     stmt_links = [statement_link(h, RELEASE_WORDS) for h in stmts]
     weak = ("Jira shows only the current and the original date, not each change between them. Statements in "
             "emails, board updates and transcripts are quoted as written, not read as dates.")
@@ -792,13 +870,28 @@ _SKIP_ITEMS = {"owner", "dated", "date", "version", "sent", "from", "to", "subje
 
 
 def kit_items(ev: Evidence) -> list[tuple[str, str, str, str]]:
-    """(item, status, rest, exact line) for each status line in a launch kit page."""
+    """(item, status, rest, exact quote) for each status line in a launch kit page.
+
+    Two layouts are read: "Deck: Ready" on one line, and a two-column table whose text
+    comes out as the item on one line and its status on the next. The quote is always an
+    exact substring of the page."""
     out = []
     for m in _ITEM_LINE.finditer(ev.content):
         item = m.group("item").strip()
         if item.lower() in _SKIP_ITEMS:
             continue
         out.append((item, m.group("status").strip(), m.group("rest").strip(), m.group(0).strip()))
+    if out:
+        return out
+    lines = list(re.finditer(r"[^\n]+", ev.content))
+    status_re = re.compile(rf"^\s*(?P<status>{_STATUS})\b(?P<rest>.*)$", re.I)
+    for prev, cur in zip(lines, lines[1:]):
+        item, sm = prev.group(0).strip(), status_re.match(cur.group(0))
+        if not sm or not item or status_re.match(item) or item.lower() in _SKIP_ITEMS | {"asset", "item"} \
+                or ":" in item:
+            continue
+        out.append((item, sm.group("status").strip(), sm.group("rest").strip(),
+                    ev.content[prev.start():cur.end()].strip()))
     return out
 
 
@@ -919,7 +1012,8 @@ def ownership(a: Ask) -> Answer:
     evs = usable(s, ctx, [t.evidence_id for t in rows])
     rows = [t for t in rows if t.evidence_id in evs]
     topic = " ".join(a.ents.projects)
-    stmts = statements(a, f"{topic} owner owns ownership leads", OWN_WORDS, purpose=a.intent.purpose)
+    stmts = statements(a, f"{topic} owner owns ownership leads", OWN_WORDS, purpose=a.intent.purpose,
+                       require=tuple(a.ents.projects))
     change = "A named owner in a plan or announcement, or a Jira history that shows reassignment."
     if not rows and not stmts:
         return _none(a, f"No ticket or statement about {topic.title()} ownership is known at this date.", change)
@@ -1020,11 +1114,414 @@ def _ids_for(session: Session, keys: list[str]) -> list[int]:
     return list(session.scalars(select(Evidence.id).where(Evidence.evidence_key.in_(keys))))
 
 
+# ---------------------------------------------------------------- on-call (decision 30)
+
+ROTA_SYSTEM = "Team wiki"   # OnCall_Rota.xlsx, the only approved source for who was on call
+_ROTA_SHOWN = 8
+
+
+@dataclass
+class RotaWeek:
+    start: date
+    evidence: Evidence
+    names: dict[str, str]   # column -> name exactly as the rota writes it
+
+    @property
+    def end(self) -> date:
+        return self.start + timedelta(days=6)
+
+    def line(self) -> str:
+        return ", ".join(f"{k} {v}" for k, v in self.names.items()) or "no names"
+
+
+def rota_weeks(a: Ask) -> list[RotaWeek]:
+    """On-call rota rows known at this time frame, by week. Nothing else is read."""
+    stmt = (select(Evidence).join(SourceRecord, Evidence.source_record_id == SourceRecord.id)
+            .where(SourceRecord.system == ROTA_SYSTEM).order_by(Evidence.id))
+    out = []
+    for e in a.session.scalars(policy.apply(visible(stmt, Evidence, a.ctx))):
+        if not e.fields_json:
+            continue
+        f = json.loads(e.fields_json)
+        week = next((v for k, v in f.items() if normalize(k).startswith("week")), None)
+        try:
+            start = date.fromisoformat(str(week)[:10])
+        except (TypeError, ValueError):
+            continue
+        names = {k: str(v) for k, v in f.items() if not normalize(k).startswith("week") and v not in (None, "")}
+        out.append(RotaWeek(start, e, names))
+    return sorted(out, key=lambda w: w.start)
+
+
+def on_call(a: Ask) -> Answer:
+    """Who the on-call rota lists for a week or a period. Commit records, incident responders and
+    statements are never used in place of the rota (DECISIONS.md 30); without a rota row the
+    answer says it can't tell."""
+    weeks = rota_weeks(a)
+    period = find_period(a.question, a.ctx.as_of)
+    if period:
+        lo, hi = period.start.date(), period.end.date()
+        span = ("the week of " if lo == hi else "") + period.label
+    else:
+        lo = hi = a.ctx.as_of.date()
+        span = f"the week of {d(lo)}"
+    covering = [w for w in weeks if w.start <= hi and w.end >= lo]
+    notes = ["The rota is a hand-copied plan, not a record of who was on call",
+             "Commit records are never used to tell who was on call (DECISIONS.md 30)"]
+    weak = "The rota is a hand-copied plan (Team wiki). A swap made on the day would not show in it."
+    change = "A PagerDuty schedule export, or another approved record of on-call handovers."
+    if not covering:
+        held = (f"the rota known at this date runs from the week of {d(weeks[0].start)} to the week of "
+                f"{d(weeks[-1].start)}" if weeks else "no on-call rota is known at this date")
+        ans = a.new(f"I can't say who was on call in {span}: no on-call rota row known at this date covers it "
+                    f"({held}). Commit records and other sources are not used in its place (DECISIONS.md 30).",
+                    status="uncertain", weakest_link="The on-call rota is the only approved source for who was on "
+                    "call, and it has no row for this period.", would_change_mind=change)
+        ans.factors = Factors(completeness="insufficient", notes=notes[1:])
+        ans.trace.append("on-call: rota rows only; none covers the period")
+        return ans
+    src = covering[0].evidence.source.filename
+    if len(covering) == 1:
+        w = covering[0]
+        listed = f"for the week of {d(w.start)}: {w.line()}"
+        if lo != w.start or hi != w.start:
+            listed = f"for {span.removeprefix('the week of ')} (the week of {d(w.start)}): {w.line()}"
+    else:
+        listed = f"for {span}: " + "; ".join(f"week of {d(w.start)}: {w.line()}" for w in covering[:_ROTA_SHOWN])
+        if len(covering) > _ROTA_SHOWN:
+            listed += f"; and {len(covering) - _ROTA_SHOWN} more week(s), listed below"
+    short = (f"The on-call rota ({src}) lists, {listed}. The rota is a hand-copied plan, not a record "
+             "of who was actually on call.")
+    chain = [ChainLink(f"Rota, week of {d(w.start)}: {w.line()}", [w.evidence.evidence_key],
+                       first_line(w.evidence.content)) for w in covering]
+    ans = a.new(short, evidence_chain=chain, weakest_link=weak, would_change_mind=change)
+    complete = covering[0].start <= lo and max(w.end for w in covering) >= hi
+    ans.factors = Factors(completeness="complete" if complete else "partial", notes=list(notes))
+    if not complete:
+        ans.warnings.append(f"The rota covers only part of {span}: weeks of {d(covering[0].start)} to "
+                            f"{d(covering[-1].start)}.")
+    if period and period.assumed_year:
+        ans.warnings.append(f"Read the date as {period.label} (no year was given).")
+    if a.ents.persons or a.ents.unknown_names:
+        ans.warnings.append("Names are given as the rota writes them; they are not matched to people here.")
+    ans.trace.append("on-call: rota rows only; commit records not used (DECISIONS.md 30)")
+    return ans
+
+
+# ---------------------------------------------------------------- workforce continuity (T6c alternative)
+
+def _hire_rows(a: Ask) -> list[tuple[dict, Evidence]]:
+    stmt = (select(Evidence).join(SourceRecord, Evidence.source_record_id == SourceRecord.id)
+            .where(SourceRecord.system == "Keka Hire").order_by(Evidence.id))
+    out = []
+    for e in a.session.scalars(policy.apply(visible(stmt, Evidence, a.ctx))):
+        if e.fields_json:
+            out.append(({normalize(k): ("" if v is None else str(v)) for k, v in json.loads(e.fields_json).items()}, e))
+    return out
+
+
+def _concentration(a: Ask) -> list[tuple[str, int, int, list[Evidence]]]:
+    """Per project: open story points held by the single largest assignee, when 40% or more. No name."""
+    rows = a.session.scalars(visible(select(Ticket), Ticket, a.ctx).order_by(Ticket.key)).all()
+    evs = usable(a.session, a.ctx, [t.evidence_id for t in rows])
+    out = []
+    for proj in sorted({t.project_key for t in rows if t.evidence_id in evs}):
+        open_rows = [t for t in rows if t.project_key == proj and t.evidence_id in evs and t.story_points
+                     and t.status.lower() not in _DONE]
+        pts = Counter()
+        for t in open_rows:
+            if t.assignee_alias:
+                pts[t.assignee_alias] += t.story_points
+        total = sum(t.story_points for t in open_rows)
+        if len(open_rows) >= 3 and pts and total and max(pts.values()) / total >= 0.4:
+            out.append((proj, max(pts.values()), total, [evs[t.evidence_id] for t in open_rows]))
+    return out
+
+
+def _reported_events(a: Ask) -> list[tuple[Claim, dict, Evidence]]:
+    """CEO-reported events (DECISIONS.md 33): known at this time frame, with a usable source."""
+    rows = a.session.scalars(released_by(select(Claim).where(Claim.subject_type == "reported_event"), Claim,
+                                         a.ctx.release_cutoff).order_by(Claim.id)).all()
+    evs = usable(a.session, a.ctx, [c.evidence_id for c in rows])
+    return [(c, json.loads(c.value), evs[c.evidence_id]) for c in rows if c.evidence_id in evs]
+
+
+def workforce_continuity(a: Ask) -> Answer:
+    """An aggregate view from documented records: departures, roles, contractors and concentrated work.
+    No one is scored, ranked or predicted (DECISIONS.md 34)."""
+    s, ctx = a.session, a.ctx
+    chain, parts = [], []
+    people = s.scalars(released_by(select(Person).where(Person.worker_type == "employee",
+                                                        Person.exit_date.is_not(None)), Person, ctx.release_cutoff)
+                       .order_by(Person.exit_date, Person.id)).all()
+    pev = usable(s, ctx, [p.source_evidence_id for p in people])
+    people = [p for p in people if p.source_evidence_id in pev]
+    gone = [p for p in people if p.exit_date <= ctx.as_of.date()]
+    due = [p for p in people if p.exit_date > ctx.as_of.date()]
+    if gone or due:
+        bits = [f"{p.title or 'a role'} (exit {d(p.exit_date)})" for p in gone + due]
+        parts.append(f"{len(gone)} confirmed departure(s) and {len(due)} confirmed upcoming exit(s) in the HR records: "
+                     + ", ".join(bits))
+        chain.append(ChainLink("Exit dates in the HR records", _keysort(pev[p.source_evidence_id] for p in gone + due)))
+    else:
+        parts.append("no confirmed departure in the HR records known at this date")
+    hires = _hire_rows(a)
+    if hires:
+        by = Counter(f.get("status") or "status not written" for f, _ in hires)
+        held = [(f, e) for f, e in hires if f.get("status", "").lower() in ("on hold", "open")]
+        parts.append("requisitions: " + ", ".join(f"{n} {st.lower()}" for st, n in sorted(by.items())) + (
+            " (" + "; ".join(f"{f.get('role') or f.get('req id')}, {f.get('team') or 'team not written'}, "
+                             f"{f.get('status').lower()} since {f.get('status date') or 'an unwritten date'}"
+                             + (f", note: {f['notes']}" if f.get("notes") else "") for f, _ in held) + ")" if held else ""))
+        chain.append(ChainLink("Requisitions in the hiring tracker", _keysort(e for _, e in hires)))
+    for proj, top, total, evs in _concentration(a):
+        parts.append(f"one person holds {top} of the {total} open {proj} story points ({round(100 * top / total)}%)")
+        chain.append(ChainLink(f"Open {proj} stories in Jira", _keysort(evs)))
+    contractors = s.scalars(select(Person).where(Person.worker_type == "contractor",
+                                                 Person.released_on <= ctx.release_cutoff)).all()
+    cev = usable(s, ctx, [p.source_evidence_id for p in contractors])
+    contractors = [p for p in contractors if p.source_evidence_id in cev]
+    if contractors:
+        parts.append(f"{len(contractors)} contractor(s) ({', '.join(sorted({p.title or 'role not written' for p in contractors}))}),"
+                     " not counted as staff")
+        chain.append(ChainLink("Contractor records", _keysort(cev.values()), role="context"))
+    reports = _reported_events(a)
+    if reports:
+        parts.append(f"{len(reports)} resignation(s) reported in a CEO voice note and not verified by any HR record")
+        chain.append(ChainLink("CEO-reported, not verified", _keysort(e for _, _, e in reports), role="context"))
+    if not chain:
+        return _none(a, "No HR, hiring or Jira record is known at this date, so continuity can't be described.",
+                     "Keka, Keka Hire or Jira exports.")
+    ans = a.new("Workforce continuity from the records, with no one scored or ranked: " + "; ".join(parts) + ".",
+                evidence_chain=chain,
+                weakest_link="These are documented facts only. Nothing here predicts who will leave, and no succession "
+                             "or handover plan is in the records.",
+                would_change_mind="An HR record of a departure, a requisition status change, or a documented "
+                                  "handover plan.")
+    ans.factors = Factors(completeness="partial", notes=["No individual is scored or ranked (DECISIONS.md 34)"])
+    return ans
+
+
+# ---------------------------------------------------------------- reported departure and its impact (T6d)
+
+_V3_NAME = r"\b(v ?3|version (3|three))\b"
+_LEAD_WORDS = ("leads", "lead", "owns", "owner", "responsible")
+_HANDOVER = ("handover", "hand over", "backup", "back-up", "deputy", "succession", "cover for")
+_NOT_NAMES = {"Bad", "Good", "News", "Notice", "What", "When", "Who", "How", "If", "I", "The", "She", "He", "They",
+              "Someone", "Anyone", "Version", "Board", "So", "Okay", "Ok", "Update"}
+
+
+def departure_impact(a: Ask) -> Answer:
+    """What a reported (or hypothetical) departure does to the work, from records only.
+
+    The report is a CEO assertion, never applied (DECISIONS.md 33): no Person, status, exit date or last
+    working day is changed or worked out. A name links to a person only as the reviewed aliases allow at
+    this time frame, and the answer says how. Only Jira assignments, documented responsibilities (rung 1-4,
+    never Git or transcripts), release dates and stored conflicts are used."""
+    s, ctx = a.session, a.ctx
+    chain, parts, missing, notes, conflict_refs = [], [], [], [], []
+    reports = _reported_events(a)
+    m = a.ents.first_person()
+    near = re.search(r"\b([A-Z][A-Za-z'-]+(?: [A-Z][A-Za-z'-]+)?)(?:'s)?\s+(?:has\s+|have\s+|just\s+)?"
+                     r"(?:resign|quit|leav|left|handed)", a.question)
+    if m is not None:
+        name = m.text
+    elif near and near.group(1).split()[0] not in _NOT_NAMES:
+        name = near.group(1)
+    else:
+        name = next((n for n in a.ents.unknown_names if n not in _NOT_NAMES), None)
+    if name is None and len(reports) == 1:
+        name = reports[0][1]["name_as_written"]
+    mine = [r for r in reports if name and normalize(r[1]["name_as_written"]) == normalize(name)]
+
+    # 1. what has been reported
+    if mine:
+        c, v, ev = mine[0]
+        quote = quote_from(ev.content, ["resigned", "resign"]) or first_line(ev.content)
+        parts.append(f"Reported, not verified: a CEO voice note ({ev.source.filename}, known from "
+                     f"{c.released_on:%d %b %Y %H:%M} IST; recording date unknown) says {quote.strip(chr(34))!r}"
+                     + (f", and gives the notice period as {v['notice_as_written']!r}" if v.get("notice_as_written")
+                        else "") + ".")
+        chain.append(ChainLink("CEO-reported, not verified (DECISIONS.md 33)", [ev.evidence_key], quote, role="context"))
+        missing += ["an HR record of the resignation", "the notice period", "a last working day"]
+    else:
+        parts.append("No record of this departure is known at this date; the question's own statement is treated as "
+                     "unverified.")
+        missing += ["any record of the departure"]
+
+    # 2. identity, as the reviewed aliases allow at this time frame
+    person, identity = None, "L"
+    if name is None:
+        parts.append("No name is given, so no person is identified.")
+    else:
+        res = resolve_person(s, name, ctx)
+        if res.status == "resolved":
+            person, identity = res.person, res.confidence or "L"
+            alias = s.scalars(released_by(select(Alias).where(Alias.normalized == normalize(name),
+                                                              Alias.status == "resolved"), Alias,
+                                          ctx.release_cutoff)).first()
+            if res.method == "alias" and alias is not None:
+                parts.append(f"Identity: '{name}' links to {person.full_name} ({person.emp_id}) only through a reviewed "
+                             f"{alias.kind.replace('_', ' ')} alias at confidence {alias.confidence}, known from "
+                             f"{alias.released_on:%d %b %Y %H:%M} IST. It is a spelling, not an HR record, so the "
+                             "identity is probable, not established.")
+            else:
+                parts.append(f"Identity: '{name}' matches {person.full_name} ({person.emp_id}) "
+                             f"({res.method or 'exact name'}, confidence {identity}).")
+        elif res.status == "ambiguous":
+            parts.append(f"Identity: '{name}' could be more than one person, so the person is not identified.")
+            missing.append("who the report is about")
+        else:
+            parts.append(f"Identity: '{name}' is not linked to any known person at this date, so the person is not "
+                         "identified.")
+            missing.append("who the report is about")
+
+    # 3. HR status, unchanged
+    if person is not None:
+        pev = usable(s, ctx, [person.source_evidence_id])
+        if pev:
+            hr = pev[person.source_evidence_id]
+            status = person.employment_status or "status not written"
+            parts.append(f"HR record: Keka (exported {d(hr.exported_on)}) shows {person.full_name} as '{status}'"
+                         + (f" with exit date {d(person.exit_date)}" if person.exit_date else " with no exit date")
+                         + (". The export predates the report, so it neither confirms nor rules it out; no exit date or "
+                            "last working day is set or worked out from the reported notice period." if mine else
+                            ". No departure is recorded, and none is assumed."))
+            chain.append(ChainLink(f"{person.full_name}'s Keka record", [hr.evidence_key]))
+
+    # 4. which project "version three" is, from the records
+    projects: dict[str, list[str]] = {}
+    v3_links = []
+    if re.search(C.VERSION, a.question, re.I):
+        epics = s.scalars(released_by(select(Claim).where(Claim.subject_type == "epic", Claim.attribute == "name"),
+                                      Claim, ctx.release_cutoff).order_by(Claim.subject_key)).all()
+        eev = usable(s, ctx, [c.evidence_id for c in epics])
+        for c in epics:
+            if c.evidence_id in eev and re.search(_V3_NAME, c.value, re.I):
+                projects.setdefault(c.subject_key.split("-")[0], []).append(c.value)
+                v3_links.append(ChainLink(f"Jira epic {c.subject_key}: {c.value}", [eev[c.evidence_id].evidence_key]))
+        board = [h for h in statements(a, "v3 version three", ("v3",), exclude_systems=("Jira", C.COMMIT_SYSTEM),
+                                       limit=3) if (h.citation.trust_rung or 5) <= 2]
+        v3_links += [statement_link(h, ("v3",), role="support") for h in board]
+        if not projects:
+            missing.append("which project 'version three' is")
+            parts.append("Version three: no record known at this date ties it to a project, so its impact is not "
+                         "established.")
+        else:
+            parts.append("Version three: the records tie it to " + ", ".join(
+                f"{p} (Jira epics {', '.join(repr(n) for n in names)})" for p, names in sorted(projects.items()))
+                + (" and the board update calls Atlas 'routing engine v3'" if board else "") + ".")
+            chain += v3_links
+    elif person is not None:
+        held = s.scalars(visible(select(Ticket.project_key), Ticket, ctx)).all()
+        projects = {p: [] for p in sorted(set(held))}
+
+    # 5. the person's evidenced work on it
+    if person is not None and projects:
+        rows = s.scalars(visible(select(Ticket).where(Ticket.project_key.in_(list(projects))), Ticket, ctx)
+                         .order_by(Ticket.key)).all()
+        tev = usable(s, ctx, [t.evidence_id for t in rows])
+        rows = [t for t in rows if t.evidence_id in tev]
+        links = {al: resolve_person(s, al, ctx) for al in {t.assignee_alias for t in rows if t.assignee_alias}}
+        theirs = [t for t in rows if t.assignee_alias and links[t.assignee_alias].person
+                  and links[t.assignee_alias].person.id == person.id]
+        epic_names = {c.subject_key: c.value for c in s.scalars(released_by(
+            select(Claim).where(Claim.subject_type == "epic", Claim.attribute == "name"), Claim, ctx.release_cutoff))}
+        if not theirs:
+            missing.append(f"any {', '.join(projects)} work assigned to {person.full_name} in Jira")
+        else:
+            open_all = [t for t in rows if t.status.lower() not in _DONE]
+            open_mine = [t for t in theirs if t.status.lower() not in _DONE]
+            pts_all, pts_mine = sum(t.story_points or 0 for t in open_all), sum(t.story_points or 0 for t in open_mine)
+            export = max((tev[t.evidence_id].exported_on for t in theirs if tev[t.evidence_id].exported_on), default=None)
+            text = (f"Jira (export {d(export)}): {person.full_name} is assigned {len(theirs)} of {len(rows)} "
+                    f"{'/'.join(projects)} stories and holds {pts_mine} of the {pts_all} open story points "
+                    f"({round(100 * pts_mine / pts_all) if pts_all else 0}%) in {len(open_mine)} open stories")
+            per_epic = []
+            for ek in sorted({t.epic_key for t in open_mine if t.epic_key}):
+                e_all = [t for t in open_all if t.epic_key == ek]
+                e_mine = [t for t in open_mine if t.epic_key == ek]
+                sole = " (all of its open work)" if len(e_mine) == len(e_all) else ""
+                per_epic.append(f"{epic_names.get(ek, ek)}: {sum(t.story_points or 0 for t in e_mine)} of "
+                                f"{sum(t.story_points or 0 for t in e_all)} open points{sole}")
+            parts.append(text + (": " + "; ".join(per_epic) if per_epic else "") + ".")
+            al_conf = sorted({links[t.assignee_alias].confidence or "L" for t in theirs})
+            if any(cn != "H" for cn in al_conf):
+                notes.append("Some Jira initials link to the person below High confidence")
+            chain.append(ChainLink(f"{person.full_name}'s open stories in Jira", _keysort(tev[t.evidence_id]
+                                                                                           for t in open_mine)))
+            # stored conflicts on these stories are shown, never resolved
+            mine_keys = {tev[t.evidence_id].evidence_key for t in open_mine}
+            for ref, sides in conflicts_for(s, ctx, [t.evidence_id for t in open_mine]):
+                touched = {e.evidence_key for e in sides.values()} & mine_keys
+                if not touched or ref.conflict_key in {r.conflict_key for r, _ in conflict_refs}:
+                    continue
+                conflict_refs.append((ref, sides))
+                parts.append(f"{ref.status.capitalize()} conflict {ref.conflict_key} ({ref.title}) touches "
+                             f"{len(touched)} of these stories.")
+        # documented responsibilities: plans and documents only (rung 1-4), never Git or transcripts
+        first = person.full_name.split()[0]
+        duty = [h for h in statements(a, f"{first} leads owns", (first,) + _LEAD_WORDS,
+                                      exclude_systems=("Jira", C.COMMIT_SYSTEM), limit=4, require=(first,))
+                if (h.citation.trust_rung or 5) <= 4
+                and any(re.search(rf"\b{w}\b", quote_from(h.content, (first,) + _LEAD_WORDS) or "", re.I)
+                        for w in _LEAD_WORDS)]
+        for h in duty[:2]:
+            q = quote_from(h.content, (first,) + _LEAD_WORDS)
+            chain.append(ChainLink(f"{h.citation.filename} ({d(h.citation.exported_on)}) says", [h.citation.evidence_key],
+                                   q, role="support"))
+            parts.append(f"Documented responsibility: {h.citation.filename} ({d(h.citation.exported_on)}) says "
+                         f"{q!r}.")
+        if not duty:
+            missing.append(f"a documented responsibility for {person.full_name}")
+        handover = [h for h in statements(a, "handover backup succession", _HANDOVER,
+                                          exclude_systems=("Jira", C.COMMIT_SYSTEM), limit=3)
+                    if (h.citation.trust_rung or 5) <= 4]
+        if handover:
+            chain += [statement_link(h, _HANDOVER) for h in handover]
+        else:
+            missing.append("a handover plan or backup owner")
+        mgr = manager_as_of(s, person, ctx)
+        if mgr.status == "known" and mgr.manager:
+            parts.append(f"Confirm first with {mgr.manager}, the manager on record: whether the report is true and who "
+                         "it is about, the notice terms and last working day, and who takes the open work.")
+
+    # 6. delivery date for the project, as recorded
+    for v in release_views(a)[0]:
+        if v.current and any(p.lower() in v.version.lower() for p in projects):
+            cev = v.evidence[v.current.evidence_id]
+            text = f"Delivery: Jira's {v.version} date is {d(date.fromisoformat(v.current.value))}"
+            if v.original and v.original.value != v.current.value:
+                text += f", moved from {d(date.fromisoformat(v.original.value))}"
+            parts.append(text + ".")
+            chain.append(ChainLink(f"{v.version} release date in Jira", [cev.evidence_key],
+                                   _claim_quote(cev, v.current.value)))
+    if missing:
+        parts.append("Not established: " + "; ".join(dict.fromkeys(missing)) + ".")
+    ans = a.new(" ".join(parts), status="uncertain", evidence_chain=chain,
+                weakest_link="The resignation rests on one CEO voice note with no recording date; no HR record confirms "
+                             "it" + (f", and the name links to a person only at confidence {identity}" if person and
+                                     identity != "H" else "") + ".",
+                would_change_mind="An HR record of the resignation (a letter or a Keka update) naming the person, with "
+                                  "the notice terms and last working day, and a documented handover of the work above.")
+    ans.factors = Factors(identity=identity if person else "L", completeness="partial",
+                          notes=notes + ["The reported resignation is a CEO assertion, not an HR record (DECISIONS.md 33)"])
+    for ref, sides in conflict_refs:   # shown with both sides; finalize() counts them, never resolves them
+        ans.conflicts.append(ref)
+        for side, key, summary in ref.sides:
+            if key not in ans.keys():
+                ev = next((e for e in sides.values() if e.evidence_key == key), None)
+                ans.evidence_chain.append(ChainLink(f"{ref.conflict_key} side {side}: {summary}", [key],
+                                                    ref.quotes.get(key) or (first_line(ev.content) if ev else None),
+                                                    role="conflict"))
+    return ans
+
+
 # ---------------------------------------------------------------- fallback: evidence search
 
 def evidence_search(a: Ask) -> Answer:
     m = a.ents.first_person()
-    filters = Filters()
+    filters = Filters(exclude_systems=_no_commits(a))
     name_only = None
     if m is not None:
         if m.status == "ambiguous":
@@ -1083,6 +1580,9 @@ HANDLERS = {
     "department_headcount": department_headcount,
     "manager": manager,
     "incidents": incidents,
+    "on_call": on_call,
+    "workforce_continuity": workforce_continuity,
+    "departure_impact": departure_impact,
     "release_date": release_date,
     "launch_readiness": launch_readiness,
     "ownership": ownership,

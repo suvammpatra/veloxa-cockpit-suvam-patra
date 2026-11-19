@@ -10,18 +10,21 @@ from the question, so no caller can widen what is read.
 
 from __future__ import annotations
 
+import re
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.answering import handlers
-from app.answering.classify import Intent, classify
+from app.answering.classify import COMMIT_SYSTEM, Intent, classify, commit_records_barred
 from app.answering.confidence import Support, assess
 from app.answering.handlers import Ask, conflict_sentence, first_line
 from app.answering.llm import Phraser, polish
 from app.answering.model import Answer, ChainLink, Factors
 from app.answering.parse import find_entities, split_as_of
-from app.models import Evidence
+from app.models import Evidence, Project, SourceRecord
 from app.privacy.payroll import PayrollAggregator
+from app.retrieval import fts
 from app.retrieval.citations import extract_keys, validate
 from app.retrieval.search import conflicts_for
 from app.temporal import TimeContext
@@ -78,6 +81,10 @@ def finalize(session: Session, a: Answer, ctx: TimeContext, intent: Intent) -> A
     open_sup, resolved_sup = _detect_conflicts(session, a, ctx, intent)
 
     failures = []
+    # Disclosure rules (decisions 28, 29) are enforced by validate(): a record with nothing
+    # disclosable, or a quote from withheld text, fails with reason "withheld", and the whole
+    # answer is then withheld, whatever handler put the citation there. Decision 30 is checked the
+    # same way: a commit record cited for a question about people or on-call withholds the answer.
     for link in a.evidence_chain:
         link.citations = []
         if not link.keys:
@@ -88,6 +95,7 @@ def finalize(session: Session, a: Answer, ctx: TimeContext, intent: Intent) -> A
                 link.citations.append(check.citation)
             else:
                 failures.append(f"{check.evidence_key}: {check.reason}")
+    failures += _commit_failures(session, a, ctx)
     chained = set(a.keys())
     for k in extract_keys(" ".join((a.short_answer, a.weakest_link, a.would_change_mind))):
         if k not in chained:
@@ -120,6 +128,18 @@ def finalize(session: Session, a: Answer, ctx: TimeContext, intent: Intent) -> A
     return a
 
 
+def _commit_failures(session: Session, a: Answer, ctx: TimeContext) -> list[str]:
+    """Decision 30 backstop. A question about a person, on-call, hours or activity may not rest on
+    a Git commit record, whichever handler or fallback put it in the chain (conflict sides too).
+    The question is read again here, so this does not depend on the classification."""
+    keys = a.keys()
+    if not keys or not commit_records_barred(a.question, find_entities(session, a.question, ctx)):
+        return []
+    found = session.scalars(select(Evidence.evidence_key).join(SourceRecord, Evidence.source_record_id == SourceRecord.id)
+                            .where(Evidence.evidence_key.in_(keys), SourceRecord.system == COMMIT_SYSTEM))
+    return [f"{k}: a commit record can't show on-call, hours or activity (DECISIONS.md 30)" for k in sorted(found)]
+
+
 def _detect_conflicts(session: Session, a: Answer, ctx: TimeContext, intent: Intent) -> tuple[int, int]:
     """Attach stored conflicts touching any cited record; name both sides. Returns the open
     and resolved counts on supporting records (for confidence)."""
@@ -130,15 +150,26 @@ def _detect_conflicts(session: Session, a: Answer, ctx: TimeContext, intent: Int
     support_keys = {k for link in a.evidence_chain if link.role == "support" for k in link.keys}
     shown = {c.conflict_key for c in a.conflicts}
     open_n = resolved_n = 0
+    projects = {w for p in session.scalars(select(Project)) for w in (p.key, p.name)}
     for ref, sides in conflicts_for(session, ctx, ids, purpose=intent.purpose):
         side_keys = {e.evidence_key for e in sides.values()}
         on_support = bool(side_keys & support_keys)
-        if on_support:
+        chosen = ref.conflict_key in shown          # the handler already presents it (disagreement)
+        relevant = chosen or ref.origin == "rule" or related(a.question, ref, projects)
+        if on_support and relevant:
             if ref.status == "open":
                 open_n += 1
             else:
                 resolved_n += 1
-        if ref.conflict_key in shown:
+        if chosen:
+            continue
+        if not relevant:
+            # A whole page can be a side of several reviewed conflicts. One that is not about
+            # this question stays visible as a note, but does not change the answer.
+            files = sorted({e.source.filename for e in sides.values() if e.evidence_key in keys})
+            a.warnings.append(f"{', '.join(files)} is also a side of {ref.conflict_key} ({ref.status}): "
+                              f"{ref.title}.")
+            a.trace.append(f"conflict: {ref.conflict_key} noted, not about this question")
             continue
         shown.add(ref.conflict_key)
         a.conflicts.append(ref)
@@ -152,6 +183,30 @@ def _detect_conflicts(session: Session, a: Answer, ctx: TimeContext, intent: Int
             a.short_answer += " " + conflict_sentence(ref, by_key)
         a.trace.append(f"conflict: {ref.conflict_key} ({ref.status}){' on a supporting record' if on_support else ''}")
     return open_n, resolved_n
+
+
+_GENERIC = {"board", "update", "updates", "record", "records", "source", "sources", "call", "calls", "transcript",
+            "transcripts", "email", "versus", "what", "when", "does", "have", "tell", "about", "with", "side",
+            # number and time words alone don't make a conflict relevant ("notice period two months" is not
+            # about "two point two lakhs a month"; ARCHITECTURE.md 16.18)
+            "one", "two", "three", "four", "five", "six", "day", "days", "week", "weeks", "month", "months", "year",
+            "years", "morning", "today", "this", "that"}
+
+
+def related(question: str, ref, generic: set[str] = frozenset()) -> bool:
+    """Whether a reviewed conflict is about the question: a question word (or its word form)
+    appears in the conflict's title or side summaries. Generic words, and project names
+    (which nearly every engineering record shares), do not count."""
+    skip = _GENERIC | {g.lower() for g in generic}
+    q = {t.lower() for t in fts.terms(question) if len(t) >= 2} - skip
+    text = " ".join([ref.title, *(s[2] for s in ref.sides)]).lower()
+    tokens = {t for t in re.findall(r"[a-z0-9][a-z0-9.-]*", text) if len(t) >= 2} - skip
+
+    def same(t: str, tok: str) -> bool:
+        if len(t) <= 3 or len(tok) <= 3:   # short words and acronyms ("GA") must match exactly
+            return t == tok
+        return tok.startswith(t[:5]) or t.startswith(tok[:5])
+    return any(same(t, tok) for t in q for tok in tokens)
 
 
 def _withheld(a: Answer, failures: list[str]) -> Answer:

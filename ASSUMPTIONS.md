@@ -40,3 +40,24 @@ Entries are revised in place with a dated note when proved wrong. Nothing is del
 | --- | --- | --- | --- | --- |
 | 2026-11-18 | An incident export covers the months in its file name (Incidents_Aug-Oct_2026.xlsx: August to October 2026). With no such name, it covers the whole months of its first and last incident. A day inside the coverage with no incident is answered "none recorded"; a day outside it is "not covered" | The header recorded in TRANSCRIPT_NOTES.md (Day 3) reads "PagerDuty incident export", with no period. The file name gives one. README.txt lists PagerDuty among the files IT exported on 31 Oct 2026 (ASSUMPTIONS.md, Day 3) | M | A header or README line that states a different period, or an incident in the file outside the named months |
 | 2026-11-18 | Revision of the row above, approved provisionally at the Phase 5 checkpoint. A file name sets coverage only when every incident in the records falls inside the months it names. When its own incidents contradict it, coverage is the whole months of the first and last incident, and the answer says the name was not used. Inside coverage with no incident: "none recorded". Outside it: "coverage unavailable", never a count of zero | As above. A file name is a label someone typed; the rows are what the system exported | M | As above, or the real export showing incidents outside the months its name gives |
+
+## Day 4 — 19 November 2026
+
+| Date | Assumption | Source it rests on | Confidence | What would change my mind |
+| --- | --- | --- | --- | --- |
+| 2026-11-19 | Invoice_PIS-114.pdf's date "01/10/2026" is 1 October 2026, day first. Approved 19 Nov 2026. The string is kept as written | The vendor is in Pune and bills in Indian format. The invoice is for "September 2026 (monthly retainer)", so 1 Oct fits; 10 Jan would put it before the work. Its earlier invoice PIS-108 matches GL JV-0902 (18-31 Aug) | H | A vendor statement or GL posting dating PIS-114 otherwise |
+| 2026-11-19 | An on-call rota row covers seven days: its "Week of" date and the six days after | OnCall_Rota.xlsx rows are seven days apart and each "Week of" date is a Monday | M | A rota note or wiki page giving another hand-over day or length |
+| 2026-11-19 | "Who ran (processed, handled) payroll" asks who did the payroll work, not what anyone was paid | The question's own words; 01.eml uses "Ran Feb payroll" for the work | H | A request to read such a question as being about pay |
+| 2026-11-19 | "Version three" in T6d means Atlas | Board_Update_Apr-Jun_2026.pdf calls Atlas "routing engine v3"; Jira epics "Core routing engine v3" and "Public API v3" are in project ATLAS | H | A record naming a different version three |
+| 2026-11-19 | T6c and T6d are known from 19 Nov 2026 10:00 IST and have no recording date, so "this morning" is not dated | The Day 4 release rule (ARCHITECTURE.md 4). The documents' internal date matches T6b's and is a template date | H | A dated original of either voice note |
+
+## Clarification — 19 November 2026: the September leave pattern
+
+This clarifies two entries dated 2026-11-17 above: the assumption about the September half-day leave pattern, and the assumption about T3's unnamed engineer, which cites that pattern. Both entries stay as written.
+
+- The September leave observation in those entries is historical context. It is not admissible evidence now.
+- Under the clarified decision 29, approved on 19 November 2026, every leave-register row is withheld whole from user-facing output, whatever its leave type.
+- The pattern must not be used in answers, citations, evidence detail, agent profiles, risk assessments or worry list items.
+- The source data is unchanged. Leave_Register.xlsx and its stored rows are as ingested; only what the cockpit may show has changed.
+- Concern 2 in `voice_notes/T6a.md` was updated on 19 November 2026 to remove this evidence.
+- This clarification adds no new inference about the employee or their circumstances, and it does not re-assess the earlier entries.

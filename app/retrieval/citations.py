@@ -56,7 +56,8 @@ class CitationCheck:
     evidence_key: str
     ok: bool
     reason: str | None = None   # unknown_key | not_released_yet | not_recorded_yet | restricted |
-                                # purpose_limited | source_failed | role_copy | role_reference | quote_not_found
+                                # purpose_limited | source_failed | role_copy | role_reference | quote_not_found |
+                                # withheld (disclosure rules, decisions 28 and 29)
     citation: Citation | None = None
 
 
@@ -93,7 +94,19 @@ def validate(session: Session, keys: list[str], ctx: TimeContext, *, purpose: st
             reason = "not_recorded_yet"
         else:
             reason = policy.allowed(ev.source, include_restricted=include_restricted, purpose=purpose, roles=roles)
-        if reason is None and key in quotes and _norm(quotes[key]) not in _norm(ev.content):
-            reason = "quote_not_found"
+        if reason is None:
+            # Disclosure rules (decisions 28, 29): a record with nothing disclosable cannot be cited,
+            # and a quote may come only from text that is not withheld.
+            from app.retrieval import disclosure
+            r = disclosure.redact(session, ev.content, ctx)
+            if r.fully_withheld:
+                reason = "withheld"
+            elif key in quotes:
+                if _norm(quotes[key]) in _norm(r.text):
+                    pass
+                elif _norm(quotes[key]) in _norm(ev.content):
+                    reason = "withheld"
+                else:
+                    reason = "quote_not_found"
         checks.append(CitationCheck(key, reason is None, reason, cite(ev) if reason is None else None))
     return checks

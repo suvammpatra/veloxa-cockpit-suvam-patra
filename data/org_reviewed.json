@@ -1,0 +1,44 @@
+{
+  "about": "Reviewed organisation records approved on 19 Nov 2026 (Day 4). Load after ingesting the source pack: python -m app.ingestion org data/org_reviewed.json. Each record must match exactly one ingested source record, or it is not loaded.",
+  "contractors": [
+    {
+      "key": "CTR-S-PATIL",
+      "name": "S. Patil",
+      "role_as_written": "On-call SRE support",
+      "engaged_through": "Patil Infra Services",
+      "noted_on": "2026-11-19",
+      "documented_in": "DECISIONS.md 22; ASSUMPTIONS.md (Day 3); approved 19 Nov 2026",
+      "evidence": {"file": "Invoice_PIS-114.pdf", "match": ["S. Patil", "On-call SRE support"], "date": "2026-10-01"},
+      "not_linked_to": ["Snehal", "Sneha"]
+    }
+  ],
+  "announced_changes": [
+    {
+      "key": "T6B-MKT-CRO",
+      "department": "Marketing",
+      "reports_to_position": "CRO",
+      "position_title": "CRO",
+      "status": "announced",
+      "effective_date": null,
+      "noted_on": "2026-11-19",
+      "documented_in": "DECISIONS.md 18 and 19; ASSUMPTIONS.md (Day 3); approved 19 Nov 2026",
+      "evidence": {"file": "T6b_CEO_Voice_Note.docx", "match": ["marketing will report to the new CRO"], "date": null},
+      "also_stated_in": [
+        {"file": "T4_Head_of_Marketing_Call.docx", "match": ["report into the new CRO"], "date": null}
+      ]
+    }
+  ],
+  "reported_events": [
+    {
+      "key": "T6D-RESIGNATION-REPORT",
+      "event": "resignation",
+      "status": "reported_unverified",
+      "name_as_written": "Pria",
+      "reported_by": "CEO voice note T6d (auto-transcribed WhatsApp voice note forwarded by the CEO's assistant)",
+      "notice_as_written": "Notice period two months, I think.",
+      "noted_on": "2026-11-19",
+      "documented_in": "DECISIONS.md 33; ARCHITECTURE.md 16.18; reported by the CEO and not verified by any HR record",
+      "evidence": {"file": "T6d_CEO_Voice_Note.docx", "match": ["Pria resigned this morning"], "date": null}
+    }
+  ]
+}

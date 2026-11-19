@@ -333,16 +333,19 @@ def test_reviewed_alias_file_holds_only_the_approved_rows():
         ("AD", "jira_initials", "resolved", "VX009", "H"),
         ("SK", "jira_initials", "resolved", "VX012", "H"),
         ("Snehal", "pagerduty_name", "unresolved", "", "L"),
+        ("Pria", "transcript_name", "resolved", "VX007", "M"),   # approved 19 Nov (Day 4)
+        ("Vicky", "transcript_name", "resolved", "VX004", "M"),  # approved 19 Nov (Day 4)
     }
-    assert all("ASSUMPTIONS.md" in r["evidence_note"] for r in rows)
+    assert all(r["evidence_note"].startswith("Reviewed") and ".md" in r["evidence_note"] for r in rows)
+    assert not any(r["alias_text"] in ("Sid", "Sneha") for r in rows)  # not approved
 
 
 def test_reviewed_alias_file_loads_once(db):
-    for emp_id in ("VX007", "VX009", "VX012", "VX018"):
+    for emp_id in ("VX004", "VX007", "VX009", "VX012", "VX018"):
         db.add(Person(emp_id=emp_id, full_name=f"Synthetic {emp_id}", worker_type="employee",
                       released_on=datetime(2026, 11, 16, 10, 0)))
     db.flush()
-    assert load_curated(db, REVIEWED) == 6
+    assert load_curated(db, REVIEWED) == 8
     assert load_curated(db, REVIEWED) == 0
     from app.services.identity import resolve_person
     assert resolve_person(db, "Snehal", AT_D3).status == "unresolved"

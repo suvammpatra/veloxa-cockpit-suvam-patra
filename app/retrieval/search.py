@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Conflict, ConflictSide, Evidence, SourceRecord
 from app.repositories.temporal import visible
-from app.retrieval import fts, policy
+from app.retrieval import disclosure, fts, policy
 from app.retrieval.citations import Citation, cite
 from app.retrieval.subjects import UnknownDepartment, department_evidence_ids, person_evidence_ids
 from app.services.identity import resolve_person
@@ -48,6 +48,7 @@ class Filters:
     department: str | None = None
     source_keys: tuple[str, ...] = ()
     systems: tuple[str, ...] = ()
+    exclude_systems: tuple[str, ...] = ()  # applied in SQL, before the limit
     file_types: tuple[str, ...] = ()
     max_trust_rung: int | None = None     # 3 keeps rungs 1-3
     date_from: date | None = None          # on what the evidence describes
@@ -65,6 +66,7 @@ class Hit:
     score: float | None
     duplicates: list[str] = field(default_factory=list)  # evidence keys with the same text
     via_conflict: bool = False                            # returned because it is a side of a hit's conflict
+    withheld: bool = False                                # some sentences withheld (disclosure rules 28, 29)
 
 
 @dataclass
@@ -155,6 +157,8 @@ def search(session: Session, query: str | None, ctx: TimeContext, filters: Filte
         stmt = stmt.where(SourceRecord.source_key.in_(f.source_keys))
     if f.systems:
         stmt = stmt.where(SourceRecord.system.in_(f.systems))
+    if f.exclude_systems:
+        stmt = stmt.where(or_(SourceRecord.system.is_(None), SourceRecord.system.not_in(f.exclude_systems)))
     if f.file_types:
         stmt = stmt.where(SourceRecord.file_type.in_([t.lower().lstrip(".") for t in f.file_types]))
     if f.max_trust_rung is not None:
@@ -173,6 +177,14 @@ def search(session: Session, query: str | None, ctx: TimeContext, filters: Filte
             stmt = stmt.where(end >= datetime.combine(f.date_from, time.min))
     rows = session.scalars(stmt).all()
 
+    # Disclosure rules (decisions 28, 29): a record whose text is all withheld is left out, and so
+    # is one that matched only inside withheld sentences. Nothing says so, because a count of
+    # left-out records would itself hint at what they hold. Stored records are not changed.
+    red = {ev.id: disclosure.redact(session, ev.content, ctx) for ev in rows}
+    rows = [ev for ev in rows if not red[ev.id].fully_withheld
+            and not (red[ev.id].withheld and result.terms and not disclosure.mentions_any(red[ev.id].text,
+                                                                                         result.terms))]
+
     # 5. rank
     def rank(ev: Evidence):
         return (scores.get(ev.id, 0.0) if scores else 0.0, ev.source.trust_rung or 6,
@@ -186,9 +198,11 @@ def search(session: Session, query: str | None, ctx: TimeContext, filters: Filte
     ordered = []
     for group in groups.values():
         best = min(group, key=lambda e: (e.source.trust_rung or 6, e.released_on, e.id))
-        hit = Hit(citation=cite(best), content=best.content, snippet=snippets.get(best.id),
+        r = red[best.id]
+        hit = Hit(citation=cite(best), content=r.text,
+                  snippet=disclosure.snippet(r.text, result.terms) if r.withheld else snippets.get(best.id),
                   score=scores.get(best.id) if scores else None,
-                  duplicates=[e.evidence_key for e in group if e is not best])
+                  duplicates=[e.evidence_key for e in group if e is not best], withheld=r.withheld)
         ordered.append((rank(group[0]), hit, best.id))
     ordered.sort(key=lambda t: t[0])
     result.total_matches = len(ordered)
@@ -206,15 +220,22 @@ def search(session: Session, query: str | None, ctx: TimeContext, filters: Filte
 
 def get_evidence(session: Session, key: str, ctx: TimeContext, *, purpose: str | None = None,
                  include_restricted: bool = False) -> Hit | None:
-    """One evidence row by key, if it exists and may be used at this time frame."""
+    """One evidence row by key, if it exists and may be used at this time frame.
+
+    Copies are never returned. A copy is not citable, and a printed copy can hold the text of
+    a purpose-limited message (Email_Printouts.pdf holds 09.eml), so serving it would bypass
+    the purpose rule (DECISIONS.md 23). Found on the first real source-pack run."""
     if not re.fullmatch(r"E\d{3,}", key or ""):
         raise SearchError("An evidence key looks like E001.")
     stmt = select(Evidence).join(SourceRecord, Evidence.source_record_id == SourceRecord.id) \
         .where(Evidence.evidence_key == key)
     stmt = policy.apply(visible(stmt, Evidence, ctx), include_restricted=include_restricted, purpose=purpose,
-                        roles=("evidence", "copy", "reference"))
+                        roles=("evidence", "reference"))
     ev = session.scalar(stmt)
-    return None if ev is None else Hit(citation=cite(ev), content=ev.content, snippet=None, score=None)
+    if ev is None:
+        return None
+    r = disclosure.redact(session, ev.content, ctx)   # withheld sentences never leave (decisions 28, 29)
+    return Hit(citation=cite(ev), content=r.text, snippet=None, score=None, withheld=r.withheld)
 
 
 # ---------------------------------------------------------------- helpers
@@ -269,22 +290,50 @@ def conflicts_for(session: Session, ctx: TimeContext, evidence_ids, *, include_r
                           origin=c.origin, confidence=c.confidence, would_overturn=c.would_overturn,
                           documented_in=c.documented_in, noted_on=c.released_on,
                           quotes={usable[s.evidence_id].evidence_key: q for s in c.sides
-                                  if (q := _side_quote(s, usable[s.evidence_id]))})
+                                  if (q := _disclosable_side_quote(session, ctx, s, usable[s.evidence_id]))})
         out.append((ref, {s.evidence_id: usable[s.evidence_id] for s in c.sides}))
     return out
 
 
+def _disclosable_side_quote(session: Session, ctx: TimeContext, side: ConflictSide, ev: Evidence) -> str | None:
+    """A side quote taken from the visible text only (decisions 28, 29)."""
+    q = _side_quote(side, ev)
+    if q is None:
+        return None
+    r = disclosure.redact(session, ev.content, ctx)
+    return q if q in r.text else None
+
+
 def _side_quote(side: ConflictSide, ev: Evidence) -> str | None:
-    """For a reviewed side: the sentence (or table cell) of the record that holds the first
-    match term, as an exact substring of the record. None for ingestion conflicts."""
+    """For a reviewed side: the shortest run of up to three consecutive lines that holds every
+    match term (a PDF table puts a label and its value on separate lines), else the sentence
+    with the first term. Always an exact substring of the record. None for ingestion conflicts."""
     if not side.reference:
         return None
     import json
     terms = json.loads(side.reference).get("match")
-    term = (terms[0] if isinstance(terms, list) else terms) or ""
+    terms = [t for t in (terms if isinstance(terms, list) else [terms]) if t]
+    if not terms:
+        return None
+
+    def has(text: str, term: str) -> bool:
+        pattern = re.escape(term).replace(r"\ ", r"\s+")
+        return re.search(rf"(?<!\w){pattern}(?!\w)", text, re.I) is not None
+
+    for m in re.finditer(r"[^.!?\n;]+[.!?]?", ev.content):  # one sentence holding every term
+        piece = m.group(0).strip()
+        if all(has(piece, t) for t in terms):
+            return piece[:240].strip()
+    lines = [m for m in re.finditer(r"[^\n]+", ev.content)]
+    for width in (1, 2, 3):
+        for i in range(len(lines) - width + 1):
+            start, end = lines[i].start(), lines[i + width - 1].end()
+            piece = ev.content[start:end]
+            if all(has(piece, t) for t in terms):
+                return piece.strip()[:240].strip()
     for m in re.finditer(r"[^.!?\n;]+[.!?]?", ev.content):
         piece = m.group(0).strip()
-        if re.search(re.escape(term).replace(r"\ ", r"\s+"), piece, re.I):
+        if has(piece, terms[0]):
             return piece[:240].strip()
     return None
 
@@ -297,8 +346,9 @@ def _attach_conflicts(session: Session, ctx: TimeContext, f: Filters, result: Se
         result.conflicts.append(ref)
         for ev in sides.values():
             if ev.evidence_key not in shown:
-                result.hits.append(Hit(citation=cite(ev), content=ev.content, snippet=None, score=None,
-                                       via_conflict=True))
+                r = disclosure.redact(session, ev.content, ctx)
+                result.hits.append(Hit(citation=cite(ev), content=r.text, snippet=None, score=None,
+                                       via_conflict=True, withheld=r.withheld))
                 shown.add(ev.evidence_key)
 
 

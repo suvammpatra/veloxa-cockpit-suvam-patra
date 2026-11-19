@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Veloxa CXO Cockpit</title>
+<link rel="icon" href="data:,">
+<style>
+  :root { --bg:#f7f7f5; --card:#fff; --ink:#1d1d1b; --muted:#5f5f5a; --line:#deded8; --accent:#1f5fa8;
+          --warn-bg:#fff4e0; --warn-ink:#7a4b00; --hi:#1e7b45; --mid:#8a6d00; --lo:#a33a2b; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#16171a; --card:#1f2125; --ink:#ececea; --muted:#a3a39d; --line:#34363b; --accent:#7fb2ec;
+            --warn-bg:#3a2d12; --warn-ink:#f2c879; --hi:#6fcf97; --mid:#e2c35c; --lo:#ef8a7a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 28px 0 10px; }
+  .meta, .small { color: var(--muted); font-size: 13px; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin: 12px 0; }
+  input, select, button { font: inherit; color: var(--ink); background: var(--card); border:1px solid var(--line);
+                          border-radius: 6px; padding: 6px 8px; }
+  button { cursor: pointer; background: var(--accent); color: #fff; border-color: var(--accent); }
+  .card { background: var(--card); border:1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 10px 0; }
+  .title { display:flex; gap:10px; align-items:baseline; justify-content:space-between; flex-wrap:wrap; }
+  .title h3 { margin:0; font-size: 16px; }
+  .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border:1px solid currentColor; }
+  .High { color: var(--hi); } .Medium { color: var(--mid); } .Low { color: var(--lo); }
+  .conflict { background: var(--warn-bg); color: var(--warn-ink); border-radius: 6px; padding: 6px 10px; margin: 8px 0; font-size: 14px; }
+  .label { font-weight: 600; }
+  ul { margin: 4px 0; padding-left: 20px; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--accent); }
+  .key { font-family: ui-monospace, Consolas, monospace; font-size: 12px; background: none; color: var(--accent);
+         border: 1px solid var(--line); padding: 1px 6px; margin: 2px 4px 2px 0; }
+  .quote { border-left: 3px solid var(--line); padding-left: 8px; color: var(--muted); margin: 4px 0; }
+  pre { white-space: pre-wrap; word-break: break-word; background: var(--bg); border:1px solid var(--line);
+        border-radius: 6px; padding: 8px; font-size: 13px; }
+  #evidence { position: sticky; bottom: 0; }
+  .empty { color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Veloxa CXO Cockpit</h1>
+  <div class="meta" id="frame">Loading…</div>
+  <div class="bar">
+    <label class="small" for="asof">As of</label>
+    <input id="asof" type="datetime-local">
+    <select id="mode" aria-label="Time mode">
+      <option value="known">Known at</option>
+      <option value="recorded">Recorded by</option>
+    </select>
+    <button id="refresh">Show</button>
+  </div>
+
+  <h2>What to worry about</h2>
+  <div id="message" class="empty"></div>
+  <div id="worries"></div>
+
+  <details id="moreBox"><summary>Lower-ranked items</summary><div id="more"></div></details>
+  <details id="excludedBox"><summary>Checked and not raised</summary><div id="excluded"></div></details>
+
+  <h2>Ask a question</h2>
+  <div class="bar">
+    <input id="q" style="flex:1; min-width:220px" maxlength="500" placeholder="e.g. When is Atlas GA?">
+    <button id="ask">Ask</button>
+  </div>
+  <div id="answer"></div>
+
+  <h2>Agents</h2>
+  <div class="bar">
+    <select id="agent" aria-label="Agent"><option value="">Choose an agent…</option></select>
+  </div>
+  <div id="profile"></div>
+
+  <div id="evidence"></div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function frame() {
+  const p = new URLSearchParams({ mode: $("mode").value });
+  if ($("asof").value) p.set("as_of", $("asof").value);
+  return p;
+}
+function day(iso) { return iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "undated"; }
+
+async function showEvidence(key) {
+  const box = $("evidence"); box.replaceChildren();
+  const card = el("div", "card");
+  card.append(el("div", "label", "Evidence " + key));
+  try {
+    const r = await fetch(`/api/evidence/${encodeURIComponent(key)}?` + frame());
+    const ev = await r.json();
+    if (!r.ok) { card.append(el("div", "small", ev.detail || "Not available at this date.")); }
+    else {
+      const c = ev.citation || {};
+      card.append(el("div", "small", `${c.filename || ""} · ${c.locator || ""} · ${c.system || ""} · dated ${day(c.exported_on)} · known since ${day(c.released_on)}`));
+      card.append(el("pre", null, ev.content));
+      if (ev.withheld) card.append(el("div", "small", "Part of this record is withheld under the disclosure rules."));
+    }
+  } catch (e) { card.append(el("div", "small", "Could not load the record.")); }
+  const close = el("button", null, "Close"); close.onclick = () => box.replaceChildren();
+  card.append(close); box.append(card);
+}
+
+function keyButtons(citations) {
+  const wrap = el("span");
+  for (const c of citations) {
+    const b = el("button", "key", c.evidence_key);
+    b.title = `${c.filename}, ${c.locator}; dated ${day(c.evidence_date)}; known since ${day(c.known_since)}`;
+    b.onclick = () => showEvidence(c.evidence_key);
+    wrap.append(b);
+  }
+  return wrap;
+}
+
+function worryCard(w) {
+  const card = el("div", "card");
+  const t = el("div", "title");
+  t.append(el("h3", null, `${w.rank}. ${w.title}`), el("span", "badge " + w.confidence, `Confidence ${w.confidence}`));
+  card.append(t, el("p", null, w.explanation));
+  const why = el("p"); why.append(el("span", "label", "Why it matters: "), document.createTextNode(w.why_it_matters)); card.append(why);
+  for (const c of w.conflicts) card.append(el("div", "conflict", `Sources disagree: ${c.conflict_key} (${c.status}) — ${c.title}`));
+  const unc = el("details"); unc.append(el("summary", null, "Uncertainty and what would change this"));
+  const ul = el("ul"); for (const u of w.uncertainty) ul.append(el("li", null, u));
+  unc.append(ul, el("p", null, "Would change it: " + w.would_change));
+  unc.append(el("p", "small", "Confidence: " + w.confidence_reasons.join("; ")));
+  const sp = w.score_parts;
+  unc.append(el("p", "small", `Rank score ${w.score} = 3×impact ${sp.impact.value} + 2×strength ${sp.strength.value} + recency ${sp.recency.value} + persistence ${sp.persistence.value}`));
+  card.append(unc);
+  const ev = el("details"); ev.append(el("summary", null, `Evidence (records dated ${day(w.evidence_dates.earliest)} to ${day(w.evidence_dates.latest)})`));
+  for (const item of w.evidence) {
+    const row = el("div"); row.style.margin = "8px 0";
+    row.append(el("div", null, (item.role === "support" ? "" : `[${item.role}] `) + item.statement));
+    if (item.quote) row.append(el("div", "quote", "“" + item.quote + "”"));
+    row.append(keyButtons(item.citations));
+    ev.append(row);
+  }
+  card.append(ev);
+  return card;
+}
+
+async function load() {
+  $("frame").textContent = "Loading…";
+  try {
+    const r = await fetch("/api/worries?" + frame());
+    const d = await r.json();
+    if (!r.ok) { $("frame").textContent = d.detail || "Could not load."; return; }
+    $("frame").textContent = `${d.mode === "known" ? "Known at" : "Recorded by"} ${new Date(d.as_of).toLocaleString("en-GB")} IST · ` +
+      (d.data_as_of ? `records up to ${day(d.data_as_of)}` : "no dated records") + ` · evaluated ${new Date(d.evaluated_at).toLocaleString("en-GB")}`;
+    $("message").textContent = d.message || "";
+    $("worries").replaceChildren(...d.worries.map(worryCard));
+    $("more").replaceChildren(...(d.more.length ? d.more.map(worryCard) : [el("p", "empty", "None.")]));
+    const ex = el("ul"); for (const x of d.excluded) { const li = el("li"); li.append(el("span", "label", x.area + ": "), document.createTextNode(x.reason)); ex.append(li); }
+    $("excluded").replaceChildren(ex);
+  } catch (e) { $("frame").textContent = "Could not reach the cockpit API."; }
+}
+
+async function ask() {
+  const q = $("q").value.trim(); if (!q) return;
+  const out = $("answer"); out.replaceChildren(el("p", "small", "Asking…"));
+  const p = frame(); p.set("q", q);
+  try {
+    const r = await fetch("/api/ask?" + p); const a = await r.json();
+    const card = el("div", "card");
+    if (!r.ok) { card.append(el("p", null, a.detail || "Could not answer.")); out.replaceChildren(card); return; }
+    const t = el("div", "title"); t.append(el("h3", null, a.short_answer), el("span", "badge " + a.confidence, `Confidence ${a.confidence}`));
+    card.append(t);
+    for (const c of a.conflicts || []) card.append(el("div", "conflict", `Sources disagree: ${c.conflict_key} (${c.status}) — ${c.title}`));
+    for (const link of a.evidence_chain || []) {
+      const row = el("div"); row.style.margin = "6px 0";
+      row.append(el("div", null, link.statement));
+      if (link.quote) row.append(el("div", "quote", "“" + link.quote + "”"));
+      row.append(keyButtons((link.citations || []).map(c => ({ evidence_key: c.evidence_key, filename: c.filename, locator: c.locator, evidence_date: c.exported_on, known_since: c.released_on }))));
+      card.append(row);
+    }
+    card.append(el("p", "small", "Weakest link: " + a.weakest_link), el("p", "small", "Would change my mind: " + a.would_change_mind));
+    out.replaceChildren(card);
+  } catch (e) { out.replaceChildren(el("p", "small", "Could not reach the cockpit API.")); }
+}
+
+async function loadAgents() {
+  const sel = $("agent"), keep = sel.value;
+  try {
+    const r = await fetch("/api/agents?" + frame()); const list = await r.json();
+    if (!r.ok) return;
+    sel.replaceChildren(el("option", null, "Choose an agent…"));
+    sel.firstChild.value = "";
+    for (const a of list) { const o = el("option", null, `${a.name} (${a.agent_group}, ${a.status})`); o.value = a.agent; sel.append(o); }
+    sel.value = keep;
+    if (keep) showAgent();
+  } catch (e) { /* the worry list still works without agents */ }
+}
+
+async function showAgent() {
+  const agent = $("agent").value, out = $("profile");
+  if (!agent) { out.replaceChildren(); return; }
+  out.replaceChildren(el("p", "small", "Loading…"));
+  try {
+    const r = await fetch(`/api/agents/${encodeURIComponent(agent)}?` + frame()); const p = await r.json();
+    const card = el("div", "card");
+    if (!r.ok) { card.append(el("p", null, p.detail || "Not available.")); out.replaceChildren(card); return; }
+    card.append(el("h3", null, `${p.name} — ${p.agent_group} (${p.status})`));
+    for (const f of p.facts) {
+      const row = el("div"); row.style.margin = "6px 0";
+      row.append(el("div", null, `${f.field.replaceAll("_", " ")}: ${f.statement}`), el("div", "small", `Confidence ${f.confidence}; ${f.valid}`));
+      row.append(keyButtons((f.citations || []).map(c => ({ evidence_key: c.evidence_key, filename: c.filename, locator: c.locator, evidence_date: c.exported_on, known_since: c.released_on }))));
+      card.append(row);
+    }
+    if (p.missing.length) {
+      const ul = el("ul"); for (const m of p.missing) ul.append(el("li", null, `${m.field.replaceAll("_", " ")}: Not established. ${m.reason}`));
+      card.append(el("div", "label", "Not established"), ul);
+    }
+    card.append(el("p", "small", p.sources_not_used));
+    out.replaceChildren(card);
+  } catch (e) { out.replaceChildren(el("p", "small", "Could not reach the cockpit API.")); }
+}
+
+$("agent").onchange = showAgent;
+$("refresh").onclick = () => { load(); loadAgents(); };
+$("ask").onclick = ask;
+$("q").addEventListener("keydown", e => { if (e.key === "Enter") ask(); });
+load();
+loadAgents();
+</script>
+</body>
+</html>

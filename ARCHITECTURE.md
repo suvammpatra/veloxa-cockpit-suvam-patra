@@ -488,3 +488,532 @@ Incident coverage (ASSUMPTIONS.md, Build, revised row):
 - Limit: the coverage is still an inference. A file name can be right and the file can still be partial.
 
 Schema version 4 adds the conflict's origin, noted date and documentation note, and each side's reference. An empty older database rebuilds itself; one holding sources stops, as in 16.3.
+
+### 16.9 Real source-pack validation, Days 1-3 (19 November 2026)
+
+The Day 1-3 release packs were run through the pipeline for the first time. They were read into a disposable database outside the repository. The project database was not touched, and no pack file was changed. The Day 4 pack was not opened.
+
+Run: Day 1 with release day 16 Nov, Day 2 with 17 Nov, Day 3 with 18 Nov. Day 2 and Day 3 files that carry no date of their own were given 31 Oct 2026, from the Day 1 README ("Exported by IT on 31 Oct 2026"), as section 4 and ASSUMPTIONS.md (Day 3) describe. Then the reviewed aliases and the reviewed conflicts were loaded.
+
+| Check | Result |
+| --- | --- |
+| Files | 39 found; 36 ingested; 3 templates skipped; 0 failed; 0 partial |
+| Duplicates | Day 1 ingested a second time: 12 duplicates, nothing written. Reviewed conflicts loaded again: 3 unchanged |
+| Records | 1,841 evidence rows; 19 people, 7 departments, 18 reporting lines; 62 tickets; 11 incidents; 1,453 commits; 8 Jira claims; 56 payroll rows to the restricted store only |
+| Dates | Emails from their Date headers; board updates 8 Jul and 6 Oct; resignation letter 15 Sep; launch kit 21 Jul; Keka and hiring tracker from their titles; transcripts undated |
+| Names | 1,522 facts linked. 4 not linked: "Snehal" on INC-206, 207, 209 and 211. Sneha and Snehal stay separate |
+| Conflicts | C-ARR, C-BURN and C-ATLAS-DONE loaded; each side matched the intended record and date |
+| Privacy | No individual pay amount appears in any answer checked |
+
+The findings in sections 15.5 and 15.6 held on the real records: the original GA date of 15 Sep; the change to 15 Dec on 2 Sep; the 6 Oct board's "feature-complete" against five core stories not Done; three SEV1s in August, all routing-api; and Snehal first on the rota for the week of 17 Aug.
+
+Fixes made from this run. Each has a test with a synthetic copy of the layout:
+
+- The launch kit is a two-column table: item and status come out on separate lines. The kit reader now reads that layout.
+- GA statements: the search no longer includes "date", which matched every ledger and Keka row. Jira is now left out in SQL, before the result limit, so board updates are not crowded out. Short words such as "GA" match whole words only ("GADS" is not "GA").
+- Ownership statements must name the project, so a Keka title such as "Sales Lead" is not quoted.
+- A board update is one record on one page, and it is a side of all three reviewed conflicts. A reviewed conflict now changes an answer only when it touches a supporting record and the question is about it: a question word appears in its title or sides, ignoring project names and generic words. Otherwise it is listed as a note, so it stays visible.
+- A conflict side is quoted across a label and its value when a table splits them, for example "ARR (recurring)" and "Rs. 5.8 Cr".
+- Privacy: Email_Printouts.pdf holds the text of 09.eml. Search and citation checks already left copies out, but `GET /api/evidence/{key}` served them. It no longer returns copies (decision 23).
+
+Open after this run, each needing a decision:
+
+- Invoice_PIS-114.pdf is dated "01/10/2026". The PDF date rule reads only day-month-name dates, so the invoice took the 31 Oct export date. Reading it as 1 Oct 2026 assumes day/month order.
+- No contractor record exists, so headcount lists no contractors (decision 22). The invoice names "S. Patil"; linking Snehal to S. Patil is not approved.
+- The T6b change (Marketing to a CRO, no effective date) is in a transcript only. Nothing stores it as an announced change, so the pending change is not shown next to Nikhil Bose's line (decision 18).
+- Name forms with no reviewed alias stay unlinked, including "Sid" (the launch kit owner), "Pria" and "Vicky".
+- When no handler fits, the search fallback still ranks by relevance before trust. For "monthly burn", a transcript is quoted before the board.
+
+### 16.10 Day 4 follow-ups: invoice date, contractor, announced change, aliases (19 November 2026)
+
+Four decisions approved on 19 Nov 2026, after the real-data run in 16.9. No schema change: the existing tables hold all four.
+
+Invoice date:
+
+- A vendor invoice whose page 1 has no day-month-name date is read for a numeric date in DD/MM/YYYY order. Invoice_PIS-114.pdf gives "01/10/2026": `exported_on` is 1 Oct 2026, and the string stays as written in `date_as_written`. The basis line says it was read day-first (ASSUMPTIONS.md, Day 4).
+- Only invoices use this rule. Any other file with only a numeric date is left undated, as before.
+
+Reviewed organisation records, `data/org_reviewed.json`, loaded after ingestion with `python -m app.ingestion org data/org_reviewed.json`:
+
+- Contractor CTR-S-PATIL: "S. Patil", role "On-call SRE support" as written on Invoice_PIS-114.pdf, through Patil Infra Services. Stored as a Person with worker type "contractor" and no Emp ID. No join date, email or location is stored, because the invoice gives none. Not linked to Snehal or Sneha (decision 21). Headcount lists the contractor with the invoice as evidence and never counts them. Department counts and payroll membership take employees only (decision 22).
+- Announced change T6B-MKT-CRO: Marketing to report to the CRO. It is stored as a department line with status "announced" (this file's name for the "announced_pending" status) and no effective date. The CRO is a role with no holder (decision 19). The source is the T6b voice note; T4's "I hear" is checked as a second statement.
+- The change is shown as pending, never applied (decision 18). Nikhil Bose's line to Ananya Rao stands on every date asked, including dates after the announcement. "Who does Marketing report to?" says there is no confirmed line, and lists the pending change.
+- Point-in-time: the change is shown from 10:00 IST on 19 Nov, the day it was reviewed. It is not shown in recorded-by mode, because its source transcript is undated.
+- Loading follows the conflict registry's rules: each record must match exactly one ingested record and date; loading twice changes nothing; different content is rejected, never overwritten. A contractor record that carries an Emp ID, dates or personal details is refused, and so is an announced change with an effective date.
+
+Aliases: "Pria" to Priya Nair and "Vicky" to Vikram Menon are reviewed rows at M, from 19 Nov 2026. Answers that rest on them are capped at Medium and say why. "Sid" stays unlinked. Sneha and Snehal stay separate.
+
+Real data (Days 1-3, a fresh disposable database): all three files loaded with nothing rejected. The invoice is dated 1 Oct 2026. Headcount on 19 Nov is 18 employees, with S. Patil listed and not counted. The four Snehal incidents stay unlinked.
+
+For Phase 6: linking "Pria" brings T5's "Pria has been doing late nights but she likes it" into Priya Nair's evidence. Agent profiles must leave such lines out (decision 23).
+
+### 16.11 Phase 6: evidence-grounded agent profiles (19 November 2026)
+
+The 14 agents are the people in section 8, by their Keka names, grouped as section 8 groups them (decisions 5 and 24). An agent is linked to an employee record only by an exact full-name match among employees. It is never linked by an alias, a first name or a guess. The other five staff have no agent. Contractors are never agents.
+
+A profile is built at one time frame, known-by or recorded-by. It has these fields: role, department, reporting manager, employment, responsibilities, current projects, workload indicators, historical events, pending changes, conflicts, and missing information. Each fact carries:
+
+- its evidence keys, validated;
+- the source date, and the date it became known;
+- a confidence;
+- the period it holds for;
+- notes on how names were linked and on any conflict.
+
+A field with no eligible record says "Not established", with the reason.
+
+Eligible sources are a fixed list of record systems:
+
+| System | Used for |
+| --- | --- |
+| Keka HRMS | Title, department, reporting line, join and exit dates, status as written |
+| Keka Hire | Requisitions where the person's Emp ID is the hiring manager: the only recorded responsibility |
+| Jira | Tickets linked to the person: projects, epics, and open tickets and points at the export |
+| PagerDuty | Incidents the person responded to, up to the as-of date |
+| Team wiki (on-call rota) | Weeks on the rota, labelled as a copied plan |
+
+Two reviewed exceptions may also be cited: the record behind an announced change, and the sides of a stored conflict that touches the person's records.
+
+Never used: call transcripts and voice notes, emails, git commits and their times, the leave register, the pulse survey, payroll and letters. These hold statements, opinions, personal circumstances or pay. So T5's remark about "Pria" working late cannot enter Priya Nair's profile, even though "Pria" now links to her (decision 23).
+
+Checks:
+
+- Every cited key passes citation validation at the time frame, with no purpose and nothing restricted. It must also come from an eligible system or a reviewed exception. A fact that fails is dropped and listed, never shown.
+- The profile endpoints, `GET /api/agents` and `GET /api/agents/{agent}`, take no purpose or privacy parameter.
+
+Confidence:
+
+- A fact keeps the lowest of its records' confidence and the confidence of the name link it rests on. For example, PagerDuty's "Sneha" is linked to Sneha Kulkarni by a rule at M, and the fact says so.
+- An open conflict on a fact's records makes it Low. A resolved one caps it at Medium.
+
+Time:
+
+- Before the Keka export was recorded or released, a profile establishes nothing.
+- Titles, departments and reporting lines are known from the 31 Oct snapshot. They are not back-dated.
+- After an exit date, role, department and reporting line are "not applicable", and the history stays.
+- The Marketing-to-CRO change is listed as pending, not in effect. It appears from 19 Nov and never in recorded-by mode.
+
+Real data (Days 1-3, disposable database, 19 Nov 12:00):
+
+- 14 profiles: 13 active, and Siddharth Mehta departed. 0 facts dropped. No pay amount, leave type or transcript or email text in any profile.
+- Priya Nair's and Rahul Verma's Atlas facts are Low, because C-ATLAS-DONE touches their tickets. Vikram Menon is hiring manager for REQ-013 to REQ-015. Nikhil Bose and Aisha Khan show the pending CRO change.
+- Finance and People & Ops profiles hold Keka facts only. Current projects, workload and responsibilities are "Not established" for them, because no eligible record covers that work.
+
+Access: `python -m app.agents [name] [--as-of] [--mode]`.
+
+### 16.12 Decision 23 in the answer engine (19 November 2026)
+
+Found while checking Phase 6 on real data: "Has Pria been doing late nights?" fell through to search and quoted T5's remark. Before, the classifier refused only questions about commit times. It now also refuses working-hours questions about a named person: late nights, weekends, overtime, hours worked, working late. The refusal is "performance_assessment", however the question is phrased. Questions that name no person are not affected.
+
+Still open, for review: a raw search (`/api/search` with a person filter) can still return that transcript paragraph. It is open evidence, not restricted. Blocking it would need a content rule, which has not been decided.
+
+### 16.13 Decision 23: remarks about a named person's working hours (19 November 2026)
+
+This section extends 16.12, after a full check of how T5's paragraph 10 ("Pria has been doing late nights but she likes it") can be reached.
+
+The record is open evidence: system MeetNotes AI, not restricted, role evidence. Only payroll is restricted, and only 09.eml is purpose-limited. No rule restricts this paragraph in the raw evidence layer.
+
+| Route | Before | Now |
+| --- | --- | --- |
+| Agent profile | Never: transcripts are not eligible (16.11) | Unchanged |
+| Raw search, by words | Returned | Unchanged; open decision |
+| Raw search, filtered to Priya Nair | Returned from 19 Nov, when the reviewed alias "Pria" began | Unchanged; open decision |
+| Evidence detail, and the citation check | Returned / accepted | Unchanged; open decision |
+| Answer engine | Quoted for 10 of 16 test phrasings, including indirect ones ("What has Pria been doing?", "Who works late?", "Tell me about late nights") | Never quoted or cited |
+
+Rule in the answer engine. A sentence that pairs a working-hours phrase with a name is never quoted or cited. The phrases include late nights, weekends, overtime, working late, staying late, working nights, hours worked and working pattern. The name may be a linked person, an alias, or an unlinked capitalised name. As an answer, such a sentence is a working-hours signal about a person, which decision 23 forbids. Three layers:
+
+1. The classifier refuses working-hours questions about a named person, in the wider set of phrasings, and "who ..." questions that pick people out by their hours. Questions about on-call, the rota or incidents are not affected.
+2. The search fallback and statement quotes skip such sentences. The answer says how many records it left out.
+3. The final citation check withholds any answer that still cites one, whatever handler put it there.
+
+The refusal text now names working hours as well as commit times. Each layer has a test that fails without it.
+
+The rest of T5 is unaffected: other paragraphs can still be quoted.
+
+Open, needing a decision: whether the raw evidence layer (search, evidence detail) should also hold back such remarks. A test pins the current behaviour, so any change is deliberate. A related finding with no rule yet: T2 paragraph 8 carries a personal circumstance (an absence for a wedding), and the raw layer and the search fallback can return it.
+
+### 16.14 Disclosure rules for user-facing output (19 November 2026)
+
+Decisions 28 and 29 replace the open raw-layer boundary in 16.13. `app/retrieval/disclosure.py` decides what text may leave the system. The stored evidence is never changed.
+
+Units:
+
+- A record is split into sentences at full stops, question and exclamation marks and line breaks. A single capital before a full stop is an initial, not a sentence end ("F. Shah").
+- A table row ("Header: value; Header: value") is one unit.
+- A withheld unit is replaced by one generic marker, the same for both rules: "[text withheld under disclosure rules 28 and 29]".
+
+| Output | Rule |
+| --- | --- |
+| `search()`, `GET /api/search`, the retrieval command | A record with nothing left to show is left out. So is one that matched only inside withheld text. Other hits show withheld units as the marker, and their snippet is rebuilt from visible text. Nothing says a record was left out: a count would hint at what it holds |
+| `get_evidence()`, `GET /api/evidence/{key}` | The content is returned with withheld units replaced, and `withheld: true` |
+| `validate()`, used for every answer and profile citation | A record with nothing disclosable fails as "withheld". So does a quote taken from withheld text. Either withholds the whole answer |
+| Conflict quotes | Taken from visible text only |
+| Answer engine | Uses the above. The search fallback and statements see only visible text. The working-hours refusal stays. Questions about on-call, the rota, incidents, deploys or releases are not refused |
+| Agent profiles | Unchanged: they never read these sources (decision 27), and their citations pass `validate()` |
+
+The working-hours rule needs a name in the sentence: a linked person, an alias, or a capitalised name. A sentence with operational wording (on-call, rota, incidents, PagerDuty, SEV, outages, deploys, releases, maintenance windows, change freezes) is never withheld by this rule. The personal-circumstances rule needs only one of its terms.
+
+The 16.12 to 16.13 answer filter and backstop are replaced by these shared rules. The answer engine and the disclosure rules use one working-hours phrase list.
+
+On the real records (Days 1-3), 4 of 1,841 evidence rows are affected, all withheld whole: T5 paragraph 10 (working hours); T2 paragraph 8 (wedding, in one sentence with Kartik's planning role); and Leave_Register rows 7 and 9 (marriage and sick leave). No other row changes. Across searches, evidence detail, answers and all 14 profiles, no withheld text appeared. The stored evidence hash was the same before and after.
+
+Limits:
+
+- Fixed phrase and term lists. Other wording is not caught, and a remark that also names on-call or an incident is not withheld.
+- Clause-level separation is not attempted. A mixed sentence is withheld whole.
+- Git commit rows (author and commit time) are open evidence. The search fallback can quote one, for example for "Who was on call in the week of 17 Aug 2026?". A pattern is never computed (decision 23), but single rows are not withheld.
+- The leave register's exam leave row is not withheld; "exam" is not on the term list.
+
+### 16.15 Decision 30: Git commit records (19 November 2026)
+
+Enforcement paths:
+
+| Path | What it does |
+| --- | --- |
+| `classify()` | A question with on-call, oncall, rota, pager or standby goes to the `on_call` handler, after the refusal, payroll and disagreement checks. The working-hours and commit-time refusals are unchanged |
+| `on_call()` handler | Reads only on-call rota rows (Team wiki, OnCall_Rota.xlsx) known at the time frame. A row's "Week of" date starts a seven-day week. Names are listed exactly as the rota writes them and are not matched to people. With no covering row the status is "uncertain", nothing is cited, and the answer says commit records are not used in its place |
+| `commit_records_barred()` in classify.py | True when the question names a person (linked or not), or uses on-call, "who", hours, overnight, activity, workload, productivity, performance, author or people words |
+| `evidence_search()` fallback | Leaves GitHub records out, in SQL, when the rule is true |
+| `statements()` (release date, launch readiness, ownership) | The same exclusion |
+| `finalize()` backstop, `_commit_failures()` | Reads the question again, without the classification. A GitHub record anywhere in the chain of a barred question, conflict sides included, fails as "a commit record can't show on-call, hours or activity (DECISIONS.md 30)", and the whole answer is withheld |
+| Agent profiles | Unchanged: GitHub is not on the decision 27 allowlist |
+| `search()`, `GET /api/search`, `get_evidence()`, `GET /api/evidence/{key}` | Unchanged, as decision 30 requires. Git records stay open evidence there, under the decision 28 and 29 disclosure rules |
+
+Payroll question routing. "Who ran payroll in February?" matched the pay words and went to the payroll total handler. A question with "who" and a run verb (ran, run, processed, handled, prepared, approved, signed off, did, does, do) before "payroll", and no pay-amount word (salary, pay, paid, earn, CTC, compensation, wages, take-home, amount, how much, gross, net, total, cost, bonus), now goes to the records search. The restricted payroll register stays out of search. Any pay-amount word keeps the question with the payroll handler and its refusal of individual pay. On the real records the answer now quotes 01.eml: "Ran Feb payroll since Fatima is out."
+
+Exam leave review. Leave_Register row 10 records leave type "Exam", five days in May 2026, with the employee's initial and surname and the approver. No other record mentions exams, study or courses. The row is an approved leave type with dates, like the Casual, Earned and Relocation rows. It names no family event or health matter, so decision 29 does not cover it. No rule was added and the row is unchanged, pending review. Questions about a person's intentions are already refused (decisions 11 and 23).
+
+On the real records (Days 1-3, disposable database): 25 questions where the rule applies cited no Git record. The on-call questions were answered from the rota. The week of 9 Nov 2026, after the rota ends, and any week asked before the rota was released, return "uncertain". Three repository-history questions still cited git_log.csv. The 14 agent profiles cite no Git record. The stored evidence and commit fingerprints were the same before and after.
+
+Limits:
+
+- The rule's word lists are fixed. A question about someone's activity in other words, with no name and none of the listed words, can still reach a commit row through the search fallback.
+- "Who authored this commit?" is not answered from Git.
+- A commit row quoted for a repository-history question still shows the author's email and commit time as written. No pattern is ever computed from them.
+- Rota names are not linked to people, so the answer does not say whether "Sneha" or "Snehal" is the person asked about.
+- PagerDuty responders show who responded to an incident, not who was on call. They are not used for on-call questions.
+
+### 16.16 Phase 7: the CEO worry list (19 November 2026)
+
+Code: `app/worries` (`rules.py`, `engine.py`, `__main__.py`), `GET /api/worries`, and the page at `/`. Decisions 11-16 and 23-30 apply. No LLM generates, scores or ranks a worry.
+
+Pipeline: each rule returns a candidate or an exclusion with its reason. A candidate goes through the answer engine's `finalize()`: citation checks at the time frame, disclosure rules 28 and 29, the decision 30 backstop, stored conflicts and confidence by rule. Then the well-supported check, the Git check, the score, the ranking and the duplicate check. The top three are shown, the rest are listed below them, and every exclusion is listed with its reason.
+
+Candidate rules:
+
+| Rule | Raised when | Supporting evidence | Context only | Impact |
+| --- | --- | --- | --- | --- |
+| `delivery_schedule` | A release's current Jira date is later than its original date | Jira release date and original date; that version's stories not Done | - | 3: a committed product date |
+| `service_reliability` | One service has 2 or more SEV1 incidents within 31 days, opened by the as-of date | The SEV1 incident rows | Later incidents on that service; up to 2 emails or documents (rung 1-4) naming the service | 3: repeated highest-severity incidents |
+| `capacity` | A requisition has been on hold for 30 days or more, or one assignee holds 40% or more of a project's open story points (3 or more open stories) | Hiring tracker rows; that project's open stories | Recruiting fee lines in the GL; emails on hires | 2: delivery capacity |
+| `launch_alignment` | The latest launch kit's planned date is before the release's current Jira date, or the kit's owner (linked by exact name) has left | Kit status lines; the Jira release date | The owner's employee record; an announced Marketing reporting change, as a note | 2: launch readiness |
+| `cost_trend` | One vendor and cost centre has 4 or more monthly GL entries, rising in each of the last 3 or more, and up 20% or more | The GL lines | One email on burn | 2: recurring cost |
+
+Evaluated and never raised on their own:
+
+- `contractor_continuity`: a contractor record alone is not a risk. No record shows an end date, a notice or a gap in cover, and a risk is never raised from missing evidence.
+- `org_change`: an announced change is not in effect and rests on transcripts. It is shown as a note on a related worry (decisions 18, 19).
+- `reported_metrics`: revenue, profit and net burn can't be computed (section 9). Disagreeing figures are shown when asked.
+
+Score, with fixed weights:
+
+    score = 3 x impact (1-3) + 2 x strength (Low 1, Medium 2, High 3) + recency (0-2) + persistence (0-2)
+
+- Strength is the confidence computed by `finalize()`. Impact comes first because it is what the CEO asked about (T6a). Strength comes second, so a weakly supported item can't outrank a well-supported one of equal impact.
+- Recency: the latest supporting record dated within 31 days of the as-of date scores 2, within 92 days 1, otherwise 0.
+- Persistence is set by each rule:
+  - delivery: 1 for a moved date, plus 1 if over a third of the story points are open;
+  - reliability: incidents on the service in 3 or more months score 2, in 2 months 1;
+  - capacity: on hold 60 days or more scores 2, otherwise 1;
+  - launch: planned date passed by 30 days or more scores 2, otherwise 1;
+  - cost: 5 or more consecutive rises score 2, otherwise 1.
+- Ties go to higher impact, then higher strength, then the rule key.
+- The number of records never enters the score.
+
+Confidence is the existing rule (section 9, step 7), unchanged. An open conflict on a supporting record makes it Low. The conflict is listed on the worry, and its sentence is added to the explanation, so it is never resolved silently.
+
+Evidence requirements (what "well supported" means, decision 13). A worry is shown only when:
+
+- every cited record passes its check;
+- at least one supporting record comes from a rung 1-4 source, so transcript-only support is never shown;
+- no citation is a Git commit record.
+
+A candidate whose supporting records are all cited by a higher-ranked worry is a duplicate: it is merged into that worry and listed as related.
+
+Privacy. The rules never read:
+
+- Git commits, in their searches or as support (decision 30);
+- the leave register or the pulse survey;
+- payroll rows, or GL lines whose cost centre or vendor names payroll or salaries (decision 3);
+- 09.eml (decision 23);
+- the rota as a record of people.
+
+No worry text names an employee. Assignees, responders and the kit owner are not named. Withheld text can't support a worry, because `finalize()` fails it.
+
+Time. Every read goes through `visible()` and `usable()` at the time frame, and recorded-by mode uses evidence dates. `data_as_of` is the date of the latest supporting record shown (decision 16). `evaluated_at` is the evaluation timestamp only; the same records give the same list.
+
+Interface. `/` opens on the worry list (decision 12). It shows:
+
+- the as-of frame and the date of the latest record;
+- up to three worries, each with confidence, conflicts, uncertainty, the score breakdown and its evidence (each key opens `/api/evidence/{key}` at the same time frame);
+- lower-ranked items and exclusions, collapsed;
+- the existing question box, backed by `/api/ask`.
+
+All record text is inserted as text, never as HTML. `python -m app.worries` prints the same list.
+
+On the real records (Days 1-3, disposable database):
+
+| Time frame | Shown | Below |
+| --- | --- | --- |
+| Known 16 Nov 12:00 | cost_trend | - |
+| Known 17 Nov 12:00 | cost_trend, capacity | - |
+| Known 18 Nov 12:00 and 19 Nov 12:00 | service_reliability, delivery_schedule, cost_trend | capacity, launch_alignment |
+| Recorded by 31 Aug | service_reliability, cost_trend | - |
+| Recorded by 30 Sep | cost_trend, service_reliability, launch_alignment | - |
+
+At 19 Nov 12:00:
+
+1. routing-api SEV1s: Medium, score 16.
+2. Atlas GA moved to 15 Dec with C-ATLAS-DONE open: Low, 15.
+3. AWS charges up 37% over five rising entries: High, 15.
+4. Capacity: Medium, 14.
+5. Launch kit out of step: Medium, 13.
+
+No employee name, Git, payroll, leave or withheld text appeared at any time frame. The API matched the engine. The stored evidence and commit fingerprints and the project database hash were unchanged.
+
+Limits:
+
+- The thresholds, impact values and weights are a first proposal, pending review (decision 15).
+- Only these five areas are scored. The summit spend, the open payroll query and Cohere's advance as an item of its own are not evaluated. Retention and pulse signals are not evaluated, by design (decisions 11, 23).
+- Reliability recency follows the latest SEV1, not later lower-severity incidents.
+- The kit's owner is written only as a first name with no reviewed alias, so the owner's departure is not shown on the real records.
+- Concentration is counted by Jira assignee initials. No name is shown, but the cited Jira rows show the initials.
+- The manager to ask (decision 11) is not shown.
+- The date gap between 08.eml and the GL on when the contractor started is not shown.
+- The page has no sign-in; it is for local use.
+
+### 16.17 Phase 8: temporal and end-to-end validation (19 November 2026)
+
+Decisions 31 and 32 record the scoring and eligibility rules of 16.16.
+
+AWS cost trend check. All six GL lines behind the item were inspected.
+
+- They are one vendor (Amazon Web Services), one cost centre (ENG-INF) and one narration ("AWS, previous month"). Each is posted on the 8th of consecutive months, April to September 2026, one line a month.
+- No AWS or Amazon line exists under any other cost centre. No negative, credit, reversal or adjustment line exists anywhere in the GL export.
+- The five rises are +5.1%, +8.1%, +3.2%, +3.5% and +13.0%. The total is Rs.1,81,200 to Rs.2,48,310, +37.04%. It is measured from the first line of the run, which is also the first AWS line in the export.
+- The six cited keys are those six rows.
+- The evidence is comparable, so confidence stays High.
+
+The rule now:
+
+- breaks a run at any missing calendar month;
+- nets credits within their month and says so;
+- says "posted" for the dates;
+- quotes the narration;
+- states that the rise may have begun before the export, and that tax treatment is not stated.
+
+Journey fixes:
+
+- The page had no agent picker, which section 9 lists. It now lists the 14 agents at the chosen time frame and opens a profile, with its evidence keys and the fields not established.
+- The page now declares an empty icon, so the browser no longer requests a missing favicon.
+
+Real-data checks (Days 1-3, disposable database): 47 of 47 passed.
+
+| Area | Checks | Examples |
+| --- | --- | --- |
+| Recorded-by versus known-at | 6 | Atlas GA hidden as recorded by 1 Sep, 15 Dec from 3 Sep; 2 SEV1s as recorded by 15 Aug, 3 known at 19 Nov |
+| Release times | 6 | Day 1 headcount at 09:59 none, at 10:00 answered; Jira GA at 18 Nov 09:59 none, at 10:00 shown; alias "Pria", the contractor and the CRO note appear only from 19 Nov 10:00; Day 3 worries only from 10:00 |
+| Employees and reporting over time | 3 | 19 employees on 30 Oct, 18 on 1 Nov; Siddharth Mehta active on his exit date, departed from 1 Nov, and no Keka record as recorded by 15 Oct; Nikhil Bose's manager is the current line, with the CRO change pending |
+| Contractor versus employee | 2 | 18 employees, S. Patil listed apart and never linked to Snehal or Sneha |
+| Announced versus effective | 2 | Marketing's line unchanged, the CRO change called announced; a note on the launch worry only |
+| Worry lists over time | 8 | Seven time frames: at most three shown, every citation valid at its frame, and evidence dates not after the as-of date in recorded-by mode; the same records give the same list |
+| Conflicts | 4 | C-ATLAS-DONE absent at 18 Nov 09:59 and shown at 10:00; Low confidence; C-ARR from Day 1 |
+| Disclosure rules 28 and 29 | 5 | The four withheld rows stay withheld in evidence detail, search, answers, profiles and worries |
+| Decision 30 | 5 | On-call from the rota only; no Git in person questions, worries or profiles; raw search still returns Git rows; the working-hours question is refused |
+| CLI, API and page | 6 | Answers, worries and the agent list are the same from the command line and the API; the page reads the same endpoints |
+
+End-to-end journey: 13 of 13 passed. The application ran on a disposable copy and was driven in a headless browser:
+
+1. start;
+2. open the page;
+3. top worries equal the API, with the conflict and confidence shown;
+4. open a record;
+5. ask about Atlas;
+6. ask an on-call question;
+7. ask a refused working-hours question;
+8. open an agent profile;
+9. change the as-of date to 16 Nov 12:00, and the list and the answers match that date.
+
+There were no browser errors.
+
+A disposable database rebuilt from the Day 1-3 packs with the documented ingestion commands gave the same evidence and commit fingerprints. The stored evidence and the project database were unchanged throughout.
+
+Limits:
+
+- Day 4 records are not ingested.
+- The project database holds no sources, so a demonstration needs a disposable data folder.
+- Impact values and thresholds per rule are as in 16.16.
+
+### 16.18 Day 4 voice notes T6c and T6d (19 November 2026)
+
+Sources. The Day 4 pack holds two files: `T6c_CEO_Voice_Note.docx` and `T6d_CEO_Voice_Note.docx`. Both are auto-transcribed WhatsApp voice notes forwarded by the CEO's assistant.
+
+- Ingestion matches them to the transcript profile (rung 5) and gives them `released_on` 19 Nov 2026 10:00 IST and no `exported_on`.
+- Their internal document date (14 Nov 2026 11:33 UTC) is the same as T6b's. It is a template date, not a recording date, and is not used. "This morning" in T6d is therefore not dated.
+- In recorded-by mode they are never visible, like every undated transcript.
+
+T6c (decision 34).
+
+- Classification checks a ranking request before any other rule: a likelihood word near a leaving word, plus ranking language ("everyone", "rank", "list", "who", "most", "team"). That gives the refusal `retention_ranking`.
+- A single named person's intentions keep the `speculation` refusal. Slack, WhatsApp, DMs, chat logs or "their messages" give the refusal `private_messages`.
+- When the question cites someone's approval, the refusal adds that it is not consent from the people concerned.
+- Every one of these refusals offers "What is our workforce continuity?". That question goes to `workforce_continuity()`, which lists:
+  - confirmed departures and upcoming exits, from Keka exit dates;
+  - requisitions by status, with roles, teams and status dates, from Keka Hire;
+  - the largest single share of each project's open story points (40% or more), with no name;
+  - contractors;
+  - the count of unverified reported events.
+
+T6d (decision 33).
+
+- `data/org_reviewed.json` gains a `reported_events` section. `T6D-RESIGNATION-REPORT` holds the name ("Pria") and the notice period exactly as written, matched to T6d's own text.
+- The loader stores it as a Claim with subject type `reported_event`, status `reported_unverified` and confidence L. It refuses any record that carries an identity, an exit date, a last working day or another status. It never touches Person.
+- A question that pairs a departure word with a person, or with "version three", goes to `departure_impact()`. The handler answers in this order:
+  - the report, quoted;
+  - the identity, through the reviewed aliases known at that time;
+  - the Keka record, unchanged;
+  - which project "version three" is, from Jira epic names and rung 1-2 statements;
+  - the person's open stories and story points per epic;
+  - documented responsibilities, from rung 1-4 records with a lead or owner word;
+  - stored conflicts on those stories;
+  - the release date;
+  - the manager on record to confirm with;
+  - a "Not established" list.
+- The report is a context link, never support. The answer's status is "uncertain".
+
+On the real records (Days 1-4, disposable database), known at 19 Nov 2026 12:00:
+
+- T6c is refused, with the consent sentence and the continuity offer.
+- The continuity view gives:
+  - 1 confirmed departure (Product Marketing Manager, exit 31 Oct 2026);
+  - requisitions: 2 on hold since 12 Aug 2026, 2 open, 1 filled and 1 closed;
+  - one person holding 62 of 115 open ATLAS story points (54%);
+  - 1 contractor;
+  - 1 unverified report.
+- T6d, part 1: "Pria" links to Priya Nair (VX007) only through the reviewed transcript alias at confidence M, known from 19 Nov 2026 10:00. Keka (exported 31 Oct) shows her Active with no exit date.
+- T6d, part 2: version three is Atlas. The Jira epics read "Core routing engine v3" and "Public API v3", and the Apr-Jun board update reads "Atlas (routing engine v3)".
+- T6d, part 3: Jira shows her assigned 35 of 62 ATLAS stories. She holds 62 of 115 open points in 14 open stories:
+  - Core routing engine v3: 14 of 20 open points;
+  - Real-time re-routing: 29 of 29, all of its open work;
+  - Performance and hardening: 19 of 37.
+- T6d, part 4: 04.eml (2 Jun) says "Priya leads the core engine and re-routing". C-ATLAS-DONE touches 3 of her open stories. GA is 15 Dec 2026, moved from 15 Sep. The manager on record is Vikram Menon.
+- T6d, not established: an HR record of the resignation, the notice period, a last working day, and a handover plan or backup owner. Confidence is Low.
+- At 19 Nov 09:59, neither the report nor the alias is known, and "Pria" is not linked to anyone.
+
+Engine change. Number and time words ("two", "months", "this", "morning" and similar) no longer make a stored conflict relevant to a question. Before this, "notice period two months" attached C-BURN ("two point two lakhs a month") to T6d.
+
+Checks:
+
+- 33 tests in `tests/test_t6cd.py`. The full suite has 361 tests. Each of five new safeguards was switched off once, and a test failed each time.
+- On the Days 1-4 disposable database, the 47 real-data checks of 16.17 still pass. The browser journey, with the T6c, T6d, continuity and profile steps added, passes 17 of 17.
+- A clean copy, with no `.git`, caches or databases, installed `requirements.txt` into a new virtual environment, passed all 361 tests, and rebuilt the Days 1-4 demo database with the same evidence fingerprint.
+
+Limits:
+
+- The ranking and private-message wordings are fixed lists.
+- An indirect personal signal, such as a single leave row returned by the search fallback, is still open evidence under decisions 28 and 29.
+- A question naming several people uses the first name found.
+- The impact answer reads Jira and documents only. It can't see work that is not ticketed.
+
+### 16.19 Final review: leave records, the T6d record and decisions 33-34 (19 November 2026)
+
+Finding (real records, Days 1-4, disposable database):
+
+- 17 of the 19 Leave_Register rows were open: casual, earned, relocation and exam rows, and five "Personal (half day, PM)" rows for one engineer in September. Only the marriage and sick rows were withheld.
+- The open rows appeared in search ("leave" returned all 17), in evidence detail, and in the answer fallback. "Who took exam leave?" and "Who relocated?" cited them.
+- Profiles, worries and the continuity view never read the register. A person-filtered search returned none, because the rows use initials.
+
+Correction:
+
+- `disclosure.sentence_reason()` now treats a table row with a leave-type field ("Leave Type", "Type of leave", "Leave reason" or "Reason for leave") as a personal circumstance, whatever the value.
+- The rule sits in the shared disclosure layer, so it covers search, snippets, evidence detail, citation checks, conflict quotes and answers.
+- Jira, Keka, hiring and pulse rows are unaffected, and the stored rows are unchanged.
+
+Result:
+
+- 21 of the 1,740 evidence rows under the default roles are withheld, all whole: the 19 leave rows, T2 paragraph 8 and T5 paragraph 10. This updates the counts in 16.14.
+- 01.eml's "since Fatima is out" stays visible.
+- Outside the leave register, the only exam remark (T2 paragraph 8) was already withheld.
+- Pulse survey rows are team-level (at least 3 responses, comments hidden for teams under 6) and are unchanged.
+
+Other checks in this review:
+
+- The diff of `data/org_reviewed.json` against its 18 Nov version adds only the `reported_events` block. The other sections are byte-for-byte the same.
+- Between the Days 1-3 and Days 1-4 disposable databases, persons, reporting lines, memberships, department lines, aliases and every claim other than the report are identical.
+- Priya Nair's profile at 19 Nov 12:00 is identical.
+- The report's source hash equals the file's own hash.
+
+Tests:
+
+- 20 tests in `tests/test_disclosure.py`, and four leave rows of other types added to the shared test company.
+- Switching the rule off made 15 of them fail. The profile test passes either way, because profiles never read the register.
+- Full suite: 381. Real-data checks: 47 of 47. Browser journey: 19 of 19, with T6d checked on the page at 09:59 and at 10:00.
+
+Limits:
+
+- The rule needs a leave-type field. A leave record exported without one, or a sentence such as "X is on leave for Y" in prose, is caught only by the word lists of decisions 28 and 29.
+- No worry can use a leave pattern now, even without names.
+
+### 16.20 Setup and run workflow (19 November 2026)
+
+Finding. On 19 Nov the cockpit was started with `VELOXA_DATA_DIR` set to an external folder in which no ingestion had ever run.
+
+- On startup, `create_app()` creates the data folder and an empty schema, so the server served an empty database.
+- The page showed "no dated records", an empty worry list and 14 agents with "identity_not_established".
+- The release pack had been given to the ingestion commands under a wrong folder name, and every path check failed.
+
+Correction: one workflow in four PowerShell scripts at the repository root, with shared helpers in `scripts/common.ps1`. No answer, privacy or ingestion logic changed.
+
+Configuration:
+
+- It lives in `.env` (not committed). The application already reads it, so the server, the command line and the scripts use the same folder.
+- `setup.ps1` writes `VELOXA_DATA_DIR`, `VELOXA_PORT` and `VELOXA_SOURCE_PACK`. It keeps every other line.
+- The release pack location is kept only there, never in the documentation.
+- The demo data folder must be outside the repository. A data folder inside it, including `data`, is refused.
+
+| Script | Behaviour |
+| --- | --- |
+| `setup.ps1` | Checks Python 3.11+; creates `.venv` only when missing; installs `requirements.txt` into it; checks the four day folders read-only; creates an empty data folder if missing; writes `.env`. Never ingests |
+| `setup-demo-data.ps1` | Uses `.venv` Python. Checks the release pack and that the target database is missing or empty. A loaded database ends with "nothing to do"; any other non-empty database, or a payroll store beside an empty one, is refused. Ingests Day 1 to Day 4 with the validated release days and export dates, then the three reviewed files, stopping at the first failure. Prints a strict summary |
+| `start.ps1` | Uses `.venv` Python. Runs the readiness check and refuses a missing or empty database or missing reviewed files. Refuses a port in use, and names the owner without stopping it. Then starts the server from the repository root and prints the URL |
+| `verify.ps1` | Read-only PASS or FAIL checks. The interpreter; the data folder; the database (strict counts, reviewed files, payroll store present). With a server on the port: that it runs from `.venv`, `/health`, the worry list, 14 agents with established identities, an Atlas answer, T6c, T6d at 19 Nov 09:59 and 10:00, and the page |
+
+`app/readiness.py` (`python -m app.readiness`):
+
+- It opens SQLite read-only (`mode=ro`), so a missing database is reported and never created.
+- It refuses the repository's data folder without opening it.
+- It checks evidence, people, the three reviewed files and the payroll store's presence. Payroll amounts are never read.
+- It compares the expected Days 1-4 counts: a WARN normally, a FAIL with `--strict`.
+
+On Windows, `.venv` Python is a launcher that starts the base interpreter with the virtual environment. `verify.ps1` therefore recognises the server by the launcher in its command line or as its parent process.
+
+Tests:
+
+- An autouse fixture in `tests/conftest.py` gives every test its own `VELOXA_DATA_DIR`, so no test can reach the demo or project database through `.env`.
+- `tests/test_readiness.py` (7) covers missing, empty, loaded and project databases, read-only behaviour and the command line.
+- `tests/test_ops_scripts.py` (15) covers ASCII-only scripts, parsing, the refusals for a missing or empty database or the repository folder, and a refused second load.
+- Full suite: 403.
+
+Run on 19 Nov:
+
+- `setup.ps1` created `.venv` and `.env`.
+- `setup-demo-data.ps1` loaded into the previously empty `cockpit.db`, with every expected count matched. The evidence fingerprint equals the validated Days 1-4 database. A second run did nothing.
+- `start.ps1` started the server on 8010, and `verify.ps1` passed every check.
+- The browser journey passed 19 of 19 against that server.
+- Each refusal was exercised. The project database was unchanged throughout.
+
+Limits:
+
+- The scripts are for Windows PowerShell.
+- The day folders, release days and expected counts are those of the Days 1-4 pack. A new pack day needs an entry in `scripts/common.ps1` and new expected counts in `app/readiness.py`.
+- "Why is Atlas not complete?" has no dedicated handler. The keyword fallback answers it weakly; "When is Atlas GA?" and "Is the Atlas engine feature-complete?" give the evidence-backed answers.

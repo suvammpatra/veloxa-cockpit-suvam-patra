@@ -30,7 +30,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.ingestion import parsers, profiles, typed
-from app.ingestion.dates import find_export_date, first_full_date, parse_instant
+from app.ingestion.dates import find_export_date, first_full_date, first_numeric_dmy, parse_instant
 from app.ingestion.identity_links import link_identities
 from app.models import Evidence, IngestionError, SourceRecord
 from app.privacy.payroll import PayrollStore
@@ -230,6 +230,11 @@ class Ingestor:
             found = first_full_date(parsed.units[0].content)
             if found:
                 return _midnight(found[0]), f"First full date on {parsed.units[0].locator}: '{found[1]}'.", found[1]
+            if profile.name == "invoice":
+                found = first_numeric_dmy(parsed.units[0].content)
+                if found:
+                    return (_midnight(found[0]), f"First numeric date on {parsed.units[0].locator}: '{found[1]}', "
+                            "read as DD/MM/YYYY (approved for vendor invoices, ARCHITECTURE.md 16.10).", found[1])
         if self.default_exported_on is not None:
             return _midnight(self.default_exported_on), "Given to the ingestion command (--exported-on).", None
         if cand.readme_export is not None:
