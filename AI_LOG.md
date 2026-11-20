@@ -306,3 +306,79 @@ AI assistance (one AI coding assistant session):
 | 2026-11-19 | Whether the server runs from `.venv` | A check comparing the listening process's executable with `.venv` Python | On Windows the venv launcher starts the base interpreter, so the check would have failed a correct server | The launcher is matched in the command line or as the parent process | Inspecting the running process |
 | 2026-11-19 | The agent count in `verify.ps1` | `@(Invoke-RestMethod ...)` | Windows PowerShell 5.1 returns a JSON array as one object, so it counted 1 | The response is piped through `ForEach-Object` first | The first `verify.ps1` run |
 | 2026-11-19 | Configuration defaults | Treating the example values (`data`, port 8000) as unset | It hid a wrong setting instead of reporting it | Explicit values are used; a data folder inside the repository is refused with a message | Review before the first run |
+
+## Build — 20 November 2026 (interface visual polish)
+
+My work: set the visual direction (dark glass, yellow accent used sparingly), the functions that must not change, and the checks.
+
+AI assistance (one AI coding assistant session):
+
+- Restyled `app/web/index.html` with CSS variables, and changed its script only to add class names and wrapper elements. Every element id, endpoint and data field is unchanged. Drafted ARCHITECTURE.md 16.21.
+- Ran the full suite (403 passing) and the browser journey (19 of 19), and checked five widths for horizontal overflow (none), on a disposable copy of the validated database. Reviewed screenshots at desktop and phone widths.
+
+| Date | What I was establishing | What AI returned | Where it was wrong | What the record now says | How it was caught |
+| --- | --- | --- | --- | --- | --- |
+| 2026-11-20 | Labels of the expandable rows | A tag plus the old label | The row read "Uncertainty: Uncertainty and what would change this", repeating itself | The tag names the section, and the label says what is inside | Reviewing the desktop screenshot |
+
+## Build — 20 November 2026 (interface: liquid-glass material)
+
+My work: rejected the first restyle as a conventional dark dashboard and set a liquid-glass direction in Veloxa's own colours, with the functions that must not change and the screenshot checks.
+
+AI assistance (one AI coding assistant session):
+
+- Rewrote the page's styles and structure: three glass levels with specular and rim light, ambient background light, a floating sidebar with section highlighting, a floating header, a central question bar and a floating evidence drawer. The data functions were spliced in unchanged and compared byte for byte. Drafted ARCHITECTURE.md 16.22.
+- Reviewed screenshots at four widths, fixed what they showed, and re-ran the full suite (403 passing) and the browser journey (19 of 19).
+
+| Date | What I was establishing | What AI returned | Where it was wrong | What the record now says | How it was caught |
+| --- | --- | --- | --- | --- | --- |
+| 2026-11-20 | Scrolling under the floating header | A sticky header 24 px below the top of the window | Content showed in the strip above the header | A fixed top fade dissolves it | Scrolled screenshot |
+| 2026-11-20 | The evidence drawer position | A drawer centred on the window | It covered the sidebar on desktop | It is centred on the content column; full width on small screens | Screenshot with the drawer open |
+| 2026-11-20 | Long answer text | Weight 500 | Windows renders it as semibold, which is heavy to read | Regular weight | Screenshot |
+| 2026-11-20 | A screenshot that showed the page four times | It looked like a layout fault | It was a headless-browser capture artifact without `--disable-gpu`; the page was correct | Captures use the flag, as the earlier scripts did | Capturing again with the flag |
+
+## Build — 20 November 2026 (interface colours: blue, black and white)
+
+My work: kept the approved liquid-glass design and replaced its yellow theme with a blue, black and white palette, keeping the semantic confidence and conflict colours.
+
+AI assistance (one AI coding assistant session):
+
+- Replaced every warm colour in the page's styles from an explicit list: tokens, ambient light, the brand mark, buttons, glows, highlights, keys and the rim light. The markup and script were checked byte for byte as unchanged. Scanned for leftover warm values (none) and drafted ARCHITECTURE.md 16.23.
+- Reviewed screenshots at four widths, then ran the full suite (403 passing) and the browser journey (19 of 19).
+
+| Date | What I was establishing | What AI returned | Where it was wrong | What the record now says | How it was caught |
+| --- | --- | --- | --- | --- | --- |
+| 2026-11-20 | The colour replacement | A replacement list | One step targeted text an earlier step had already changed, so it stopped before writing; the file was untouched | The redundant step was removed, and the run then completed | The script's own check on each replacement |
+| 2026-11-20 | A toolbar in the 390 px screenshots | It could have been taken for a page element | It is drawn by a browser extension in the test browser | Not in the page source or document; recorded as a capture artifact | A read-only check of the page document |
+
+## Build — 20 November 2026 (agent interviews and final submission)
+
+My work: set the final submission scope. Agents could be interviewed only if every answer stays a cited briefing from records, with no invented persona, no service per agent and no activity after the data ends. I also asked for the Decision 8 status, clear source-pack and fresh-clone steps, and a full regression.
+
+AI assistance (one AI coding assistant session):
+
+- Audited the 14 agents against the brief, then wrote the shared interview engine (`app/agents/interview.py`), the `/api/agents/{agent}/ask` route and the question box under the agent profile, using existing page classes only. Drafted DECISIONS.md 35 and the Decision 8 status, ARCHITECTURE.md 16.25, and the README and SYSTEM_DESIGN.md updates.
+- Wrote 50 tests covering all 14 agents. Ran the full suite (453 passing), a real-data check of 14 agents × 11 questions on a disposable database copy, the browser journey (22 of 22), layout checks at four widths, and a mutation check of five safeguards (all caught).
+
+| Date | What I was establishing | What AI returned | Where it was wrong | What the record now says | How it was caught |
+| --- | --- | --- | --- | --- | --- |
+| 2026-11-20 | "Will she leave?" asked of one agent | The resignation-ranking refusal | It is one person's intentions, not a ranking of people | Refused as an intention; the ranking text needs ranking words | Reading the answer text |
+| 2026-11-20 | A personal-life question | An answer that said "Not established" twice | Repeated text | Said once | Reading the answer text |
+| 2026-11-20 | Facts below High confidence | Every such fact labelled "inferred" | Priya Nair's Jira facts were Low because an open conflict touches the export, not because of a weak name link | Labels give the reason: disputed, inferred or lower confidence | Real-data check on a disposable copy |
+| 2026-11-20 | The README workload example | Rahul Verma's workload "from incidents and the on-call rota" | His workload comes from open Jira tickets | The README example says Jira | Real-data check on a disposable copy |
+
+## Build — 20 November 2026 (Agents workspace)
+
+My work: asked for the Agents section to become its own workspace, so the CEO no longer scrolls past a whole profile to reach the interview. I set the structure (employee search, a compact profile header, four tabs, an interview panel that stays in reach) and the limits: the same design, no backend change, no invented or zero values.
+
+AI assistance (one AI coding assistant session):
+
+- Rebuilt the Agents section of `app/web/index.html` as a separate view: an employee search box, a profile header that quotes cited facts, four tabs with expandable panels, and a sticky interview panel that becomes a bottom bar on phones. The worry list, question box and evidence functions were left byte for byte as before. Drafted SYSTEM_DESIGN.md section 4.2 and the README changes.
+- Checked in a headless browser on a disposable database copy: the full journey (30 of 30), including all 14 employees chosen through the search box and every profile fact, key and "not established" item compared with the API; keyboard use; interview answers, refusals and citations for Priya Nair and Vikram Menon. Layout at 1440, 1280, 1024 and 390 px; the full suite (453 passing).
+
+| Date | What I was establishing | What AI returned | Where it was wrong | What the record now says | How it was caught |
+| --- | --- | --- | --- | --- | --- |
+| 2026-11-20 | The profile header | A rule that let the name block fill the row | It also matched the initials circle, which stretched into an oval | The rule names the name block only | Screenshot at 1440 px |
+| 2026-11-20 | The four tabs on narrow screens | A tab strip that scrolls sideways | At 1024 and 390 px, "Evidence & Sources" was hidden off the edge | Tabs wrap, and form a 2 by 2 grid on phones | Layout check of each tab's position, and screenshots |
+| 2026-11-20 | The evidence tag in the narrow interview panel | The shared tag style | "Evidence" broke over two lines | Tags in the workspace do not wrap | Screenshot at 1440 px |
+| 2026-11-20 | Keyboard use of the employee search | Typing highlights the first match | Clearing the box also highlighted the first employee, so the first arrow press skipped one | An empty box highlights nothing until an arrow key is pressed | Keyboard step of the browser journey |
+| 2026-11-20 | A layout run that stopped at 1024 px | It looked as if the page had frozen | The headless browser stopped drawing after full-page screenshots; the page measured 60 frames a second in the same state | Each width runs in a fresh browser with fewer screenshots | A frame-rate probe with and without the glass effects |

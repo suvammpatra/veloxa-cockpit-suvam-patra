@@ -1017,3 +1017,168 @@ Limits:
 - The scripts are for Windows PowerShell.
 - The day folders, release days and expected counts are those of the Days 1-4 pack. A new pack day needs an entry in `scripts/common.ps1` and new expected counts in `app/readiness.py`.
 - "Why is Atlas not complete?" has no dedicated handler. The keyword fallback answers it weakly; "When is Atlas GA?" and "Is the Atlas engine feature-complete?" give the evidence-backed answers.
+
+### 16.21 Interface visual polish (20 November 2026)
+
+`app/web/index.html` is restyled as a dark glass interface with one yellow accent. Only presentation changed: the same endpoints and data fields, the same element ids, and record text still inserted as text, never as HTML. No API, answer, worry, evidence, identity, time or disclosure logic changed.
+
+Design tokens are CSS variables at the top of the page:
+
+- Backgrounds: `#08090B` and `#111214`.
+- Glass surfaces: translucent charcoal with a 14 px backdrop blur and a thin translucent border.
+- Accent: `#F5C542`, with `#E6B936` for hover.
+- Text: `#F5F5F5`, with `#A1A1AA` for secondary text.
+- Confidence: High green, Medium orange, Low red, so none is confused with the accent.
+- Conflicts: an orange banner.
+
+The accent is kept for the brand mark, primary buttons (Show, Ask), focus rings, the current time frame, the top-ranked worry's edge, the "Why it matters" label and evidence keys.
+
+Changes by area:
+
+- Header: brand mark and title; the time frame split into pills ("Known at" highlighted, records up to, evaluated) with the same text as before; the as-of controls grouped.
+- Worry cards: title and confidence badge in one row; "Why it matters" in its own panel; conflicts as banners; Uncertainty and Evidence as separately tagged expandable rows; evidence chains as rows with role tags, quotes and key chips.
+- Answer card: role tags on the evidence chain, and a separated footnote for the weakest link and what would change the answer.
+- Agent profiles: an initials avatar; each established fact as a labelled row with its confidence and keys; "Not established" fields in a separate dashed panel.
+- Evidence record: a sticky drawer.
+- Small screens: from 760 px down the header, title rows, question bar and profile rows stack.
+- A reduced-motion preference turns transitions off.
+
+JavaScript changes are limited to class names and wrapper elements. The only text changes are the two expandable-row labels, now "What would change this assessment" and "Records dated ... to ...", beside an Uncertainty or Evidence tag.
+
+Checks on 20 Nov, with the page served from a disposable copy of the Days 1-4 database:
+
+- The full suite: 403 passed.
+- The browser journey: 19 of 19, covering worries, evidence, the Atlas and on-call answers, the hours refusal, T6c, T6d, the continuity view, profiles, the 16 Nov view, and T6d at 09:59 and 10:00. There were no browser errors.
+- At 1440, 1280, 1024, 768 and 390 px, with all sections expanded and a long answer, a profile and a record open, no element overflowed horizontally.
+
+Limits:
+
+- The page is dark only.
+- Backdrop blur needs a current browser. Without it the surfaces are plain translucent charcoal.
+- The date and time picker uses the browser's own control, styled only through the dark colour scheme.
+
+### 16.22 Interface: liquid-glass material (20 November 2026)
+
+This revision of 16.21 changes presentation and page structure only. Unchanged: the same endpoints, data fields and element ids; record text still inserted as text; and the same eight data functions, byte for byte.
+
+Material system (CSS variables in `app/web/index.html`):
+
+| Level | Used for | Treatment |
+| --- | --- | --- |
+| 1, thick glass | Sidebar, header, question bar | 30 px blur at 175% saturation over stacked translucent white-to-clear gradients on charcoal; a top inner highlight, a bottom inner shade and a deep drop shadow |
+| Popover | Evidence drawer | 36 px blur, the most opaque level, a faint yellow rim and the deepest shadow |
+| 2, cards | Worries, answer, profile | 22 px blur at 160% saturation and lighter gradients |
+| 3, nested tints | "Why it matters", Uncertainty and Evidence sections, evidence rows, profile facts | Translucent tints with an inner highlight; no extra blur |
+
+Every level-1 and level-2 surface carries two pseudo-elements:
+
+- a specular sheen across the top-left (`::before`);
+- a rim light (`::after`): a 1 px gradient border cut out with a CSS mask, bright at the top-left edge and warm at the bottom-right.
+
+Without `backdrop-filter`, the surfaces fall back to near-opaque charcoal.
+
+Background: a fixed obsidian base with a few soft light sources behind the glass. They are a warm yellow glow at the top-left and behind the question area, a cool neutral light at the top-right, three soft-edged light shapes for the blur to refract, and a vignette. A fixed top fade dissolves content before it reaches the floating header and sidebar.
+
+Layout:
+
+- A floating glass sidebar links to the three existing sections. A small observer marks the section in view, with a yellow glass highlight and `aria-current`.
+- The header floats over the scrolling content.
+- The question bar is the largest control on the page, with a warm glow behind it.
+- The evidence drawer floats over the content column.
+- Below 1100 px the sidebar narrows. Below 900 px it becomes a floating pill bar and the header stops floating. Below 640 px the rows stack.
+
+Accessibility:
+
+- Focus rings are yellow on dark.
+- Smooth scrolling and transitions apply only when reduced motion is not requested.
+- Established profile facts carry a green dot; "Not established" fields sit in a recessed dashed panel.
+
+Checks on 20 Nov, with a disposable copy of the Days 1-4 database:
+
+- The full suite: 403 passed.
+- The browser journey: 19 of 19, with no browser errors.
+- At 1440, 1280, 1024 and 390 px, the page was screenshotted at the top, scrolled under the header, with the answer and evidence drawer open, and with the profile in view. No element overflowed horizontally. The blur and rim mask were applied.
+
+Limits:
+
+- The material needs a current browser with `backdrop-filter` and CSS masks. Others get the opaque fallback without the rim light.
+- The date and time picker remains the browser's control.
+
+### 16.23 Interface colours: blue, black and white (20 November 2026)
+
+The yellow accent of 16.21 and 16.22 is replaced by a blue palette. Those sections stay as written. The material, layout and behaviour of 16.22 are unchanged. Only `<style>` in `app/web/index.html` changed; the markup and script are byte for byte as before.
+
+| Token | Value | Used for |
+| --- | --- | --- |
+| Background | `#080A0F`, charcoal `#0E131D` | Page base |
+| Glass surface | `rgba(18, 23, 34, 0.68)`; cards `0.60` | Level-1 and level-2 glass, under the white-to-clear layers |
+| Secondary glass | `rgba(255, 255, 255, 0.045)` to `0.065` | Nested sections, rows and facts |
+| Primary blue | `#2563EB` | Lower half of the primary buttons; the brand mark |
+| Bright blue | `#3B82F6` | Button fill, the active-section and rank-1 edges, focus rings, key and tag borders, glows, the rim light's trace |
+| Light cyan | `#60CCFF` | Accent text (the brand name, the current time, "Why it matters", evidence keys and tags, the evidence label); the active-navigation dot; a cool light at the top-right |
+| Text | `#FFFFFF`, secondary `#A1A1AA` | All text |
+
+Changes from 16.22:
+
+- Ambient light is blue: deep blue at the top-left, a bright-blue pool behind the question bar, a cyan glint at the top-right, and one blue light shape for the blur to refract.
+- Primary buttons are bright-to-primary blue with a white top sheen, white text, a cyan rim and a restrained blue glow.
+- Inner highlights on active items and keys are cool white.
+- The non-blur fallback uses the blue-charcoal surface.
+- Unchanged: green, orange and red confidence colours, and the orange conflict banner and role tags, because they carry meaning.
+
+Checks on 20 Nov, with a disposable copy of the Days 1-4 database:
+
+- No yellow or warm value remains in the page. A scan for the former values found none; only the semantic orange remains.
+- The full suite: 403 passed.
+- The browser journey: 19 of 19, with no browser errors.
+- At 1440, 1280, 1024 and 390 px, the screenshots were reviewed. No element overflowed horizontally, and the blur and rim light were applied.
+- The 390 px captures showed a toolbar that a browser extension in the test browser draws. It is in neither the page source nor the page document.
+
+### 16.24 System design reference (20 November 2026)
+
+`SYSTEM_DESIGN.md` describes the system as built, in one place, with diagrams. Sections 1-14 above are the Day 2 design and stay as written. The following parts of them were not built, or were replaced, as recorded in this section 16 and in DECISIONS.md:
+
+| Section | As planned | As built |
+| --- | --- | --- |
+| 3 | A Vendor entity | The vendor is a column on FinancialTxn |
+| 5 | LLM extraction for emails and transcripts | All extraction is by rule (16.3) |
+| 8 | Persona and conversation memory for each agent | Evidence-only profiles from allowlisted systems (decisions 24 and 27; 16.11) |
+| 9, step 6 | LLM phrasing of answers | A validated wording hook; no provider is shipped, so answers use the rule-built wording (16.7) |
+| 9 | Worry items for the summit, the payroll query and Cohere's advance | Five worry rules (16.16) |
+| 12 | 28 test questions | 403 automated tests, including refusal, uncertainty, point-in-time and disclosure tests |
+
+### 16.25 Agent interviews (20 November 2026)
+
+The CEO can ask a question to any of the 14 agents (DECISIONS.md 35). Section 8's persona design stays replaced (16.24); an interview is a briefing from the employee's records, never the employee speaking.
+
+- `app/agents/interview.py`: one shared, rule-based engine for all 14 agents. No LLM, memory, per-agent service or framework, and nothing runs between questions.
+- `GET /api/agents/{agent}/ask?q=` with `as_of` and `mode`, like every other route. Unknown agent: 404. Missing question or over 500 characters: 422. The response is the usual five-field answer, with kind `agent_interview`.
+- The page: a question box under the selected agent's profile, shown once an agent is picked. It uses the existing classes; `<style>` is unchanged.
+
+Order of checks for one question:
+
+1. The answer engine's classifier, with the employee added as the person asked about. Individual pay, working hours and performance, intentions, resignation ranking and private messages are refused with the engine's own texts. A single person's "will they leave" is refused as an intention, not as a ranking.
+2. Personal life, opinions, feelings and motivation: "Not established in available records", with no citation (decisions 24 and 29).
+3. Fixed word rules map the question to profile fields: role, department, manager, employment and history, responsibilities, projects, workload, pending changes; an overview question takes all of them. A question that maps to none gets "Not established in available records" and the list of topics.
+4. The profile at the same time frame (16.11). Each fact keeps its keys. Only High confidence is labelled verified; below High the label gives the reason the profile recorded: disputed (an open conflict), inferred (a name link below High) or lower confidence. A field with no fact gives "Not established in available records" and the profile's reason.
+5. `finalize()` as for any answer: keys re-validated (time frame, policy, disclosure), conflicts attached, confidence by the usual rule.
+
+Each answer starts "From records about <name> (<department>, <status>), not <first name> speaking". A departure question adds a warning that reported events are not employee records (decision 33). A question naming another person adds a warning that only the selected employee is covered.
+
+Checks on 20 Nov:
+
+- `tests/test_interview.py`, 50 tests on the synthetic company: every one of the 14 agents for record, personal and refused questions; keys limited to the agent's own profile and validated; no transcript, git, leave, payroll or letter source; the working-hours remark never shown; labels; a departed agent; an earlier time frame; the API.
+- The full suite: 453 passed (403 earlier and 50 new).
+- A disposable copy of the Days 1-4 database: 14 agents × 11 questions, all as expected. Engineering agents other than Vikram Menon answer projects from Jira and workload from Jira, PagerDuty or the rota; Finance, People & Ops and Marketing say workload is not established; Siddharth Mehta (departed) answers history only.
+- The browser journey: 22 of 22 (the 19 earlier steps and 3 interview steps), with no browser errors. At 1440, 1280, 1024 and 390 px with an interview answer open, nothing overflowed horizontally.
+- A mutation check: removing the personal-life rule, the pay refusal, the refusal step or the "not speaking" line, or labelling every fact verified, each made `tests/test_interview.py` fail. The file was restored byte for byte.
+
+### 16.26 Clarification to 16.25: the Agents workspace (20 November 2026)
+
+16.25 describes the original interview layout: a question box under the selected agent's profile. That text stays as written. A later redesign the same day moved the interviews into a dedicated Agents workspace:
+
+- a searchable employee selector;
+- the profile organised in tabs (Overview, Workload & Projects, Historical Events, Evidence & Sources);
+- an interview panel that stays in reach, sticky on the right on desktop and a compact bar at the bottom of the screen on mobile.
+
+The interview engine, the `/api/agents/{agent}/ask` route and the answer rules in 16.25 are unchanged. For the current interface, see SYSTEM_DESIGN.md section 4.2.

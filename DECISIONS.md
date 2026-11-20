@@ -325,3 +325,27 @@ Approved on 19 November 2026:
 - The decision 34 clarification: the workforce continuity view never combines individual-level signals into an indirect resignation-risk score.
 
 The voice-note responses `voice_notes/T6c.md` and `voice_notes/T6d.md` were approved with two safeguards. T6c keeps "slag messages" as transcribed, and any reading as "Slack messages" stays qualified. T6d keeps "Pria" as a probable, not established, match; labels every Jira figure as the 31 October snapshot; and works out no last working day. Concern 2 in `voice_notes/T6a.md` no longer cites the September leave pattern as evidence.
+
+## Final submission — 20 November 2026
+
+### Decision 8 status — 20 November 2026
+
+Resolved. The recommendation recorded on 17 November was followed; the entry above stays as written.
+
+- The release pack is not committed, and never will be. No data room file is in the repository.
+- The reviewer supplies the pack: extract the organisers' zip outside the repository and pass the folder that holds the four day folders to `setup.ps1 -SourcePack`. README step 2 gives the commands.
+- Setup reads the pack and never writes to it. `setup.ps1` and `setup-demo-data.ps1` stop with a clear message if the folder or a day folder is missing.
+- What it costs me: the fresh clone needs one manual step, extracting a zip the reviewer already has.
+
+## 35. Agent interviews are briefings from records, never the person speaking
+
+- Decision: The CEO can ask a question to any of the 14 agents. One shared, rule-based engine answers it from that employee's evidence-only profile (decisions 24 and 27), at the page's time frame.
+  - Each answer starts "From records about <name> …, not <name> speaking". It never answers in the first person.
+  - Each fact keeps its evidence keys. Only a High-confidence fact is labelled verified. Below High, the label gives the reason: disputed (an open conflict touches it), inferred (it rests on a name link below High) or lower confidence.
+  - A topic with no eligible record answers "Not established in available records", with the reason.
+  - Personal life, opinions, feelings and motivation are always "Not established in available records". The records do not hold them, and none are invented.
+  - The answer engine's refusals apply unchanged: individual pay, working hours and performance, intentions, resignation ranking and private messages.
+  - Every key passes the same final checks as a CEO answer: time frame, source policy and disclosure rules.
+- Alternatives rejected: A language model playing each employee; one service or persona per agent; an agent framework; agents that keep acting after the data ends.
+- Why: The brief asks for agents that can be interviewed about role, workload, history and personal life. Decision 24 rules out invented personas and personal detail. A briefing from records answers the parts the records hold and says plainly what they do not.
+- What it costs me: The interviews are not conversational, and they cannot answer about personal life. Finance, People & Ops and Marketing agents have no workload record, so they say "Not established" for workload.
